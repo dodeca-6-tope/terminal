@@ -360,14 +360,14 @@ def test_paste_single_char():
     ti = TextInput()
     ti.handle_key(Paste("x"))
     assert ti.value == "x"
-    assert len(ti._pastes) == 1
+    assert len(ti.pastes) == 1
 
 def test_paste_preserves_value_after_clear():
     ti = TextInput()
     ti.handle_key(Paste("pasted"))
     ti.handle_key("clear-line")
     assert ti.value == ""
-    assert ti._pastes == []
+    assert ti.pastes == []
 
 
 # ── Display ──────────────────────────────────────────────────────────
@@ -447,7 +447,7 @@ def test_type_at_paste_start():
     ti.handle_key("x")
     assert ti.value == "xhello world pasted"
     assert ti.cursor == 1
-    assert ti._pastes == [(1, 19)]
+    assert ti.pastes == [(1, 19)]
 
 def test_paste_at_cursor_between_typed_text():
     ti = TextInput()
@@ -478,7 +478,7 @@ def test_backspace_right_after_paste():
     assert ti.cursor == 16
     ti.handle_key("backspace")
     assert ti.value == ""
-    assert ti._pastes == []
+    assert ti.pastes == []
 
 def test_delete_word_after_paste_does_not_eat_paste():
     """option+backspace one space after a paste should only delete the space."""
@@ -494,7 +494,7 @@ def test_delete_word_after_paste_does_not_eat_paste():
     ti.handle_key("delete-word")
     assert ti.value == "hello world pasted"
     assert ti.cursor == 18
-    assert ti._pastes == [(0, 18)]
+    assert ti.pastes == [(0, 18)]
 
 def test_delete_word_at_paste_end():
     """delete-word at end of paste deletes entire paste."""
@@ -502,7 +502,7 @@ def test_delete_word_at_paste_end():
     ti.handle_key(Paste("hello world pasted"))
     ti.handle_key("delete-word")
     assert ti.value == ""
-    assert ti._pastes == []
+    assert ti.pastes == []
 
 def test_type_after_paste_via_word_nav():
     """word-left jumps to paste start, typing inserts before paste."""
@@ -640,7 +640,7 @@ def test_paste_then_clear_line_then_type():
     ti.handle_key("clear-line")
     ti.handle_key("a")
     assert ti.value == "a"
-    assert ti._pastes == []
+    assert ti.pastes == []
 
 def test_multiple_operations_sequence():
     """Full editing sequence: type, paste, navigate, delete, type more."""
@@ -665,3 +665,57 @@ def test_multiple_operations_sequence():
     # Delete "hello "
     ti.handle_key("delete-word")
     assert ti.value == ""
+
+
+# ── Init with pastes ────────────────────────────────────────────────
+
+def test_init_with_pastes():
+    """Restoring a TextInput with paste ranges preserves display behavior."""
+    ti = TextInput("hello world pasted text", cursor=22, pastes=[(12, 22)])
+    assert ti.value == "hello world pasted text"
+    assert ti.cursor == 22
+    assert ti.pastes == [(12, 22)]
+    display = ti.display()
+    assert "[Pasted +" in display
+    assert "pasted tex" not in display
+
+def test_init_with_pastes_backspace_deletes_paste():
+    ti = TextInput("abpasted textc", cursor=13, pastes=[(2, 13)])
+    ti.handle_key("backspace")
+    assert ti.value == "abc"
+    assert ti.cursor == 2
+
+def test_init_with_pastes_navigation():
+    """Arrow keys skip over restored paste ranges."""
+    ti = TextInput("apasted textb", cursor=13, pastes=[(1, 12)])
+    ti.handle_key("left")  # b → end of paste
+    assert ti.cursor == 12
+    ti.handle_key("left")  # skip paste → 1
+    assert ti.cursor == 1
+    ti.handle_key("left")  # a
+    assert ti.cursor == 0
+    ti.handle_key("right")  # → 1
+    assert ti.cursor == 1
+    ti.handle_key("right")  # skip paste → 12
+    assert ti.cursor == 12
+
+def test_init_with_cursor():
+    ti = TextInput("hello", cursor=2)
+    assert ti.cursor == 2
+    ti.handle_key("x")
+    assert ti.value == "hexllo"
+    assert ti.cursor == 3
+
+def test_init_with_multiple_pastes():
+    ti = TextInput("first paste second paste", pastes=[(0, 11), (12, 24)])
+    display = ti.display()
+    assert "[Pasted +" in display
+    assert "first paste" not in display
+    ti.handle_key("backspace")  # deletes second paste
+    assert ti.value == "first paste "
+    assert ti.pastes == [(0, 11)]
+
+def test_init_pastes_sorted():
+    """Pastes provided out of order are sorted."""
+    ti = TextInput("aabbcc", pastes=[(4, 6), (0, 2)])
+    assert ti.pastes == [(0, 2), (4, 6)]

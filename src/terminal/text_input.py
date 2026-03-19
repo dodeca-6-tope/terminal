@@ -6,10 +6,10 @@ from terminal.term import Paste
 class TextInput:
     """Editable text buffer that tracks paste ranges for display."""
 
-    def __init__(self, initial: str = ""):
-        self.value = initial
-        self.cursor = len(initial)
-        self._pastes: list[tuple[int, int]] = []  # sorted (start, end) ranges
+    def __init__(self, value: str = "", cursor: int | None = None, pastes: list[tuple[int, int]] | None = None):
+        self.value = value
+        self.cursor = cursor if cursor is not None else len(value)
+        self.pastes: list[tuple[int, int]] = sorted(pastes) if pastes else []
 
     # ── Display ──────────────────────────────────────────────────────
 
@@ -25,11 +25,11 @@ class TextInput:
         return f"{text[:cur]}{self.CURSOR_ON}{text[cur]}{self.CURSOR_OFF}{text[cur + 1:]}"
 
     def _display_text(self) -> str:
-        if not self._pastes:
+        if not self.pastes:
             return self.value
         parts = []
         pos = 0
-        for start, end in self._pastes:
+        for start, end in self.pastes:
             parts.append(self.value[pos:start])
             parts.append(self._paste_label(end - start))
             pos = end
@@ -37,10 +37,10 @@ class TextInput:
         return "".join(parts)
 
     def _display_cursor(self) -> int:
-        if not self._pastes:
+        if not self.pastes:
             return self.cursor
         offset = 0
-        for start, end in self._pastes:
+        for start, end in self.pastes:
             label_len = len(self._paste_label(end - start))
             real_len = end - start
             if self.cursor <= start:
@@ -95,19 +95,19 @@ class TextInput:
 
     def _paste_at(self, pos: int) -> tuple[int, int] | None:
         """Return paste range if pos is strictly inside it (not at boundaries)."""
-        for s, e in self._pastes:
+        for s, e in self.pastes:
             if s < pos < e:
                 return (s, e)
         return None
 
     def _paste_starting_at(self, pos: int) -> tuple[int, int] | None:
-        for s, e in self._pastes:
+        for s, e in self.pastes:
             if s == pos:
                 return (s, e)
         return None
 
     def _paste_ending_at(self, pos: int) -> tuple[int, int] | None:
-        for s, e in self._pastes:
+        for s, e in self.pastes:
             if e == pos:
                 return (s, e)
         return None
@@ -188,8 +188,8 @@ class TextInput:
     def _paste(self, text: str):
         start = self.cursor
         self._insert(text)
-        self._pastes.append((start, start + len(text)))
-        self._pastes.sort()
+        self.pastes.append((start, start + len(text)))
+        self.pastes.sort()
 
     def _backspace(self):
         if self.cursor == 0:
@@ -198,7 +198,7 @@ class TextInput:
         paste = self._paste_containing(self.cursor)
         if paste:
             start, end = paste
-            self._pastes.remove(paste)
+            self.pastes.remove(paste)
             self.value = self.value[:start] + self.value[end:]
             self._shift_pastes(start, -(end - start))
             self.cursor = start
@@ -210,8 +210,8 @@ class TextInput:
     def _clear_line(self):
         removed = self.cursor
         self.value = self.value[self.cursor:]
-        self._pastes = [(s - removed, e - removed) for s, e in self._pastes if e > removed]
-        self._pastes = [(max(0, s), e) for s, e in self._pastes if e > s]
+        self.pastes = [(s - removed, e - removed) for s, e in self.pastes if e > removed]
+        self.pastes = [(max(0, s), e) for s, e in self.pastes if e > s]
         self.cursor = 0
 
     def _delete_word(self):
@@ -225,7 +225,7 @@ class TextInput:
         before = self.value[:self.cursor].rstrip()
         cut_pos = before.rfind(" ") + 1 if " " in before else 0
         # Clamp to the end of any paste that sits between cut_pos and cursor
-        for s, e in self._pastes:
+        for s, e in self.pastes:
             if s < self.cursor and e > cut_pos and e <= self.cursor:
                 cut_pos = e
         removed = self.cursor - cut_pos
@@ -234,13 +234,13 @@ class TextInput:
         self.value = self.value[:cut_pos] + self.value[self.cursor:]
         self.cursor = cut_pos
         self._shift_pastes(cut_pos, -removed)
-        self._pastes = [(s, e) for s, e in self._pastes if e > s]
+        self.pastes = [(s, e) for s, e in self.pastes if e > s]
 
     # ── Paste range helpers ──────────────────────────────────────────
 
     def _paste_containing(self, pos: int) -> tuple[int, int] | None:
         """Return paste range if pos is inside or at the end of it."""
-        for p in self._pastes:
+        for p in self.pastes:
             if p[0] < pos <= p[1]:
                 return p
         return None
@@ -248,7 +248,7 @@ class TextInput:
     def _shift_pastes(self, after: int, delta: int):
         """Shift paste ranges. Splits any range that contains the insertion point."""
         new = []
-        for s, e in self._pastes:
+        for s, e in self.pastes:
             if s >= after:
                 new.append((s + delta, e + delta))
             elif e > after:
@@ -261,4 +261,4 @@ class TextInput:
                     new.append((s, e + delta))
             else:
                 new.append((s, e))
-        self._pastes = [(s, e) for s, e in new if e > s]
+        self.pastes = [(s, e) for s, e in new if e > s]
