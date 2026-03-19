@@ -62,7 +62,7 @@ class TextInput:
     def handle_key(self, key: str | Paste) -> bool:
         """Process a key or paste event. Returns True if handled, False otherwise."""
         if isinstance(key, Paste):
-            text = key.text.replace("\n", " ").replace("\t", " ")
+            text = key.text.replace("\r\n", " ").replace("\r", " ").replace("\n", " ").replace("\t", " ")
             self._paste(text)
             return True
         if key == "left":
