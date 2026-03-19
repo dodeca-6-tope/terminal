@@ -1,0 +1,264 @@
+"""Single-line text input with paste support."""
+
+from terminal.term import Paste
+
+
+class TextInput:
+    """Editable text buffer that tracks paste ranges for display."""
+
+    def __init__(self, initial: str = ""):
+        self.value = initial
+        self.cursor = len(initial)
+        self._pastes: list[tuple[int, int]] = []  # sorted (start, end) ranges
+
+    # ── Display ──────────────────────────────────────────────────────
+
+    CURSOR_ON = "\033[7m"   # reverse video
+    CURSOR_OFF = "\033[27m"
+
+    def display(self) -> str:
+        """Render value with paste placeholders and block cursor (reverse video)."""
+        text = self._display_text()
+        cur = self._display_cursor()
+        if cur >= len(text):
+            return f"{text}{self.CURSOR_ON} {self.CURSOR_OFF}"
+        return f"{text[:cur]}{self.CURSOR_ON}{text[cur]}{self.CURSOR_OFF}{text[cur + 1:]}"
+
+    def _display_text(self) -> str:
+        if not self._pastes:
+            return self.value
+        parts = []
+        pos = 0
+        for start, end in self._pastes:
+            parts.append(self.value[pos:start])
+            parts.append(self._paste_label(end - start))
+            pos = end
+        parts.append(self.value[pos:])
+        return "".join(parts)
+
+    def _display_cursor(self) -> int:
+        if not self._pastes:
+            return self.cursor
+        offset = 0
+        for start, end in self._pastes:
+            label_len = len(self._paste_label(end - start))
+            real_len = end - start
+            if self.cursor <= start:
+                break
+            if self.cursor >= end:
+                offset += label_len - real_len
+            else:
+                # Cursor inside a paste — snap to end of label
+                offset += label_len - (self.cursor - start)
+                break
+        return max(0, self.cursor + offset)
+
+    @staticmethod
+    def _paste_label(length: int) -> str:
+        return f"[Pasted +{length} chars]"
+
+    # ── Mutations ────────────────────────────────────────────────────
+
+    def handle_key(self, key: str | Paste) -> bool:
+        """Process a key or paste event. Returns True if handled, False otherwise."""
+        if isinstance(key, Paste):
+            text = key.text.replace("\n", " ").replace("\t", " ")
+            self._paste(text)
+            return True
+        if key == "left":
+            self._move_left()
+        elif key == "right":
+            self._move_right()
+        elif key == "home":
+            self.cursor = 0
+        elif key == "end":
+            self.cursor = len(self.value)
+        elif key == "word-left":
+            self._word_left()
+        elif key == "word-right":
+            self._word_right()
+        elif key == "backspace":
+            self._backspace()
+        elif key == "clear-line":
+            self._clear_line()
+        elif key == "delete-word":
+            self._delete_word()
+        elif key == "space":
+            self._insert(" ")
+        elif len(key) == 1 and key.isprintable():
+            self._insert(key)
+        else:
+            return False
+        return True
+
+    # ── Navigation ───────────────────────────────────────────────────
+
+    def _paste_at(self, pos: int) -> tuple[int, int] | None:
+        """Return paste range if pos is strictly inside it (not at boundaries)."""
+        for s, e in self._pastes:
+            if s < pos < e:
+                return (s, e)
+        return None
+
+    def _paste_starting_at(self, pos: int) -> tuple[int, int] | None:
+        for s, e in self._pastes:
+            if s == pos:
+                return (s, e)
+        return None
+
+    def _paste_ending_at(self, pos: int) -> tuple[int, int] | None:
+        for s, e in self._pastes:
+            if e == pos:
+                return (s, e)
+        return None
+
+    def _move_left(self):
+        if self.cursor == 0:
+            return
+        new = self.cursor - 1
+        paste = self._paste_at(new)
+        if paste:
+            self.cursor = paste[0]
+        else:
+            self.cursor = new
+
+    def _move_right(self):
+        if self.cursor >= len(self.value):
+            return
+        new = self.cursor + 1
+        paste = self._paste_at(new)
+        if paste:
+            self.cursor = paste[1]
+        else:
+            self.cursor = new
+
+    def _word_left(self):
+        """Move cursor to start of current/previous word. Pastes are atomic."""
+        if self.cursor == 0:
+            return
+        # If at end or inside a paste, jump to its start
+        paste = self._paste_containing(self.cursor) or self._paste_ending_at(self.cursor)
+        if paste:
+            self.cursor = paste[0]
+            return
+        # Move back one to get off a boundary
+        self.cursor -= 1
+        # Skip spaces backwards
+        while self.cursor > 0 and self.value[self.cursor] == " ":
+            p = self._paste_at(self.cursor)
+            if p:
+                self.cursor = p[0]
+                return
+            self.cursor -= 1
+        # Skip word chars backwards to find start of word
+        while self.cursor > 0 and self.value[self.cursor - 1] != " ":
+            p = self._paste_at(self.cursor - 1)
+            if p:
+                self.cursor = p[0]
+                return
+            self.cursor -= 1
+
+    def _word_right(self):
+        """Move cursor to start of next word. Pastes are atomic."""
+        if self.cursor >= len(self.value):
+            return
+        # If inside or at start of a paste, jump to its end
+        paste = self._paste_containing(self.cursor) or self._paste_starting_at(self.cursor)
+        if paste:
+            self.cursor = paste[1]
+            # Continue to find start of next word
+        # Skip current word chars
+        while self.cursor < len(self.value) and self.value[self.cursor] != " ":
+            p = self._paste_starting_at(self.cursor)
+            if p:
+                self.cursor = p[1]
+                break
+            self.cursor += 1
+        # Skip spaces to land on start of next word
+        while self.cursor < len(self.value) and self.value[self.cursor] == " ":
+            self.cursor += 1
+
+    # ── Insert / Delete ──────────────────────────────────────────────
+
+    def _insert(self, text: str):
+        self._shift_pastes(self.cursor, len(text))
+        self.value = self.value[:self.cursor] + text + self.value[self.cursor:]
+        self.cursor += len(text)
+
+    def _paste(self, text: str):
+        start = self.cursor
+        self._insert(text)
+        self._pastes.append((start, start + len(text)))
+        self._pastes.sort()
+
+    def _backspace(self):
+        if self.cursor == 0:
+            return
+        # If cursor is inside or at the end of a paste, delete the whole paste
+        paste = self._paste_containing(self.cursor)
+        if paste:
+            start, end = paste
+            self._pastes.remove(paste)
+            self.value = self.value[:start] + self.value[end:]
+            self._shift_pastes(start, -(end - start))
+            self.cursor = start
+        else:
+            self.value = self.value[:self.cursor - 1] + self.value[self.cursor:]
+            self.cursor -= 1
+            self._shift_pastes(self.cursor, -1)
+
+    def _clear_line(self):
+        removed = self.cursor
+        self.value = self.value[self.cursor:]
+        self._pastes = [(s - removed, e - removed) for s, e in self._pastes if e > removed]
+        self._pastes = [(max(0, s), e) for s, e in self._pastes if e > s]
+        self.cursor = 0
+
+    def _delete_word(self):
+        if self.cursor == 0:
+            return
+        paste = self._paste_containing(self.cursor)
+        if paste:
+            self._backspace()
+            return
+        # Find word boundary but don't cross into a paste
+        before = self.value[:self.cursor].rstrip()
+        cut_pos = before.rfind(" ") + 1 if " " in before else 0
+        # Clamp to the end of any paste that sits between cut_pos and cursor
+        for s, e in self._pastes:
+            if s < self.cursor and e > cut_pos and e <= self.cursor:
+                cut_pos = e
+        removed = self.cursor - cut_pos
+        if removed == 0:
+            return
+        self.value = self.value[:cut_pos] + self.value[self.cursor:]
+        self.cursor = cut_pos
+        self._shift_pastes(cut_pos, -removed)
+        self._pastes = [(s, e) for s, e in self._pastes if e > s]
+
+    # ── Paste range helpers ──────────────────────────────────────────
+
+    def _paste_containing(self, pos: int) -> tuple[int, int] | None:
+        """Return paste range if pos is inside or at the end of it."""
+        for p in self._pastes:
+            if p[0] < pos <= p[1]:
+                return p
+        return None
+
+    def _shift_pastes(self, after: int, delta: int):
+        """Shift paste ranges. Splits any range that contains the insertion point."""
+        new = []
+        for s, e in self._pastes:
+            if s >= after:
+                new.append((s + delta, e + delta))
+            elif e > after:
+                # Insertion inside this paste — split around the insertion
+                if delta > 0:
+                    new.append((s, after))
+                    new.append((after + delta, e + delta))
+                else:
+                    # Deletion inside paste — shrink it
+                    new.append((s, e + delta))
+            else:
+                new.append((s, e))
+        self._pastes = [(s, e) for s, e in new if e > s]
