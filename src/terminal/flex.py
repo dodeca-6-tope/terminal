@@ -1,5 +1,7 @@
 """Flex layout primitives for terminal UI."""
 
+import os
+
 from terminal.measure import display_width
 
 
@@ -7,11 +9,14 @@ class Flex:
     """Flex layout utilities — arrange content like CSS flexbox."""
 
     @staticmethod
-    def wrap(chunks: list, width: int, sep: str = " ") -> list[str]:
+    def wrap(chunks: list, width: int | None = None, sep: str = " ") -> list[str]:
         """Wrap chunks into lines that fit within width, joining with separator.
 
         Chunks can be str or Text (anything with len() and str()).
+        If width is None, uses the current terminal width.
         """
+        if width is None:
+            width = os.get_terminal_size().columns - 1
         sep_w = display_width(sep)
         lines: list[str] = []
         cur_parts: list[str] = []
