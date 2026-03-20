@@ -1,5 +1,7 @@
 """Low-level terminal: alt screen, raw mode, input, rendering."""
 
+from __future__ import annotations
+
 import atexit
 import codecs
 import os
@@ -8,7 +10,10 @@ import signal
 import sys
 import termios
 import tty
+from collections.abc import Callable
 from dataclasses import dataclass
+from types import FrameType
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -23,14 +28,14 @@ class Paste:
 class Terminal:
     """Context manager for full-screen terminal UI sessions."""
 
-    def __init__(self):
-        self._fd = None
-        self._saved = None
+    def __init__(self) -> None:
+        self._fd: int | None = None
+        self._saved: list[Any] | None = None
         self._active = False
         self._atexit = False
         self._utf8 = codecs.getincrementaldecoder("utf-8")("ignore")
         self._resized = False
-        self._prev_sigwinch = None
+        self._prev_sigwinch: Callable[[int, FrameType | None], Any] | int | None = None
         self._screen: list[str] = []  # what's currently on the terminal
         self._screen_rows = 0
         self._screen_cols = 0
@@ -39,9 +44,10 @@ class Terminal:
     def active(self) -> bool:
         return self._active
 
-    def __enter__(self):
-        self._fd = sys.stdin.fileno()
-        self._saved = termios.tcgetattr(self._fd)
+    def __enter__(self) -> Terminal:
+        fd = sys.stdin.fileno()
+        self._fd = fd
+        self._saved = termios.tcgetattr(fd)
         self._enter_raw()
         self._active = True
         # Alt screen, hide cursor, bracketed paste, focus events
@@ -54,10 +60,10 @@ class Terminal:
             self._atexit = True
         return self
 
-    def __exit__(self, *_):
+    def __exit__(self, *_: object) -> None:
         self.cleanup()
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         """Leave alt screen, show cursor, restore terminal."""
         if not self._active:
             return
@@ -70,17 +76,17 @@ class Terminal:
             signal.signal(signal.SIGWINCH, self._prev_sigwinch)
             self._prev_sigwinch = None
 
-    def _on_sigwinch(self, signum, frame):
+    def _on_sigwinch(self, signum: int, frame: FrameType | None) -> None:
         self._resized = True
         self._screen = []  # invalidate — terminal reflowed content
 
-    def suspend(self):
+    def suspend(self) -> None:
         """Leave alt screen and restore terminal for a child process."""
         sys.stdout.write("\033[?25h\033[?1049l")
         sys.stdout.flush()
         self._restore()
 
-    def resume(self):
+    def resume(self) -> None:
         """Re-enter alt screen and raw mode after a child process."""
         self._enter_raw()
         sys.stdout.write("\033[?1049h\033[?25l")
@@ -89,11 +95,13 @@ class Terminal:
 
     def readkey(self) -> str | Paste | None:
         """Read a single keypress. Returns None on timeout (1/60s) or resize."""
+        assert self._fd is not None
+        fd = self._fd
         if self._resized:
             self._resized = False
             return "resize"
         try:
-            ready = select.select([self._fd], [], [], 1 / 60)[0]
+            ready = select.select([fd], [], [], 1 / 60)[0]
         except InterruptedError:
             # SIGWINCH interrupts select
             if self._resized:
@@ -102,10 +110,10 @@ class Terminal:
             return None
         if not ready:
             return None
-        ch = os.read(self._fd, 1)
+        ch = os.read(fd, 1)
         if ch == b"\x1b":
-            if select.select([self._fd], [], [], 0.02)[0]:
-                seq = os.read(self._fd, 16)
+            if select.select([fd], [], [], 0.02)[0]:
+                seq = os.read(fd, 16)
                 # Bracketed paste: \x1b[200~ ... \x1b[201~
                 if seq.startswith(b"[200~"):
                     return self._read_paste(seq[5:])
@@ -169,26 +177,28 @@ class Terminal:
         if ch in (b"\x7f", b"\x08"): return "backspace"
         result = self._utf8.decode(ch)
         while not result:
-            if not select.select([self._fd], [], [], 0.01)[0]:
+            if not select.select([fd], [], [], 0.01)[0]:
                 self._utf8.reset()
                 return None
-            result = self._utf8.decode(os.read(self._fd, 1))
+            result = self._utf8.decode(os.read(fd, 1))
         return result
 
     def _read_paste(self, initial: bytes) -> Paste:
         """Read bracketed paste content until \\x1b[201~."""
+        assert self._fd is not None
+        fd = self._fd
         buf = bytearray(initial)
         end = b"\x1b[201~"
         while True:
             if end in buf:
                 idx = buf.index(end)
                 return Paste(buf[:idx].decode("utf-8", errors="replace").replace("\r", "\n"))
-            if select.select([self._fd], [], [], 0.1)[0]:
-                buf.extend(os.read(self._fd, 4096))
+            if select.select([fd], [], [], 0.1)[0]:
+                buf.extend(os.read(fd, 4096))
             else:
                 return Paste(buf.decode("utf-8", errors="replace").replace("\r", "\n"))
 
-    def render(self, lines: list[str]):
+    def render(self, lines: list[str]) -> None:
         """Write full screen with diff-based update to minimize flicker."""
         size = os.get_terminal_size()
         rows, cols = size.lines, size.columns
@@ -225,14 +235,15 @@ class Terminal:
         self._screen_rows = rows
         self._screen_cols = cols
 
-    def _enter_raw(self):
+    def _enter_raw(self) -> None:
         """Switch to raw mode, re-enable output processing for \\n → \\r\\n."""
+        assert self._fd is not None
         tty.setraw(self._fd)
         attrs = termios.tcgetattr(self._fd)
         attrs[1] |= termios.OPOST
         termios.tcsetattr(self._fd, termios.TCSADRAIN, attrs)
 
-    def _restore(self):
+    def _restore(self) -> None:
         """Restore saved terminal attributes."""
-        if self._saved:
+        if self._saved and self._fd is not None:
             termios.tcsetattr(self._fd, termios.TCSADRAIN, self._saved)

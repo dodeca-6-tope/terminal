@@ -1,6 +1,9 @@
 """Flex layout primitives for terminal UI."""
 
+from __future__ import annotations
+
 import os
+from collections.abc import Sequence
 
 from terminal.measure import display_width
 
@@ -9,7 +12,7 @@ class Flex:
     """Flex layout utilities — arrange content like CSS flexbox."""
 
     @staticmethod
-    def wrap(chunks: list, width: int | None = None, sep: str = " ") -> list[str]:
+    def wrap(chunks: Sequence[object], width: int | None = None, sep: str = " ") -> list[str]:
         """Wrap chunks into lines that fit within width, joining with separator.
 
         Chunks can be str or Text (anything with len() and str()).

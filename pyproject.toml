@@ -15,7 +15,12 @@ packages = ["src/terminal"]
 dev = [
     "pytest>=9.0.2",
     "ruff",
+    "pyright",
 ]
+
+[tool.pyright]
+pythonVersion = "3.11"
+typeCheckingMode = "strict"
 
 [tool.ruff]
 line-length = 88

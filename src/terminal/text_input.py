@@ -1,12 +1,14 @@
 """Single-line text input with paste support."""
 
+from __future__ import annotations
+
 from terminal.term import Paste
 
 
 class TextInput:
     """Editable text buffer that tracks paste ranges for display."""
 
-    def __init__(self, value: str = "", cursor: int | None = None, pastes: list[tuple[int, int]] | None = None):
+    def __init__(self, value: str = "", cursor: int | None = None, pastes: list[tuple[int, int]] | None = None) -> None:
         self.value = value
         self.cursor = cursor if cursor is not None else len(value)
         self.pastes: list[tuple[int, int]] = sorted(pastes) if pastes else []
@@ -27,7 +29,7 @@ class TextInput:
     def _display_text(self) -> str:
         if not self.pastes:
             return self.value
-        parts = []
+        parts: list[str] = []
         pos = 0
         for start, end in self.pastes:
             parts.append(self.value[pos:start])
@@ -112,7 +114,7 @@ class TextInput:
                 return (s, e)
         return None
 
-    def _move_left(self):
+    def _move_left(self) -> None:
         if self.cursor == 0:
             return
         new = self.cursor - 1
@@ -122,7 +124,7 @@ class TextInput:
         else:
             self.cursor = new
 
-    def _move_right(self):
+    def _move_right(self) -> None:
         if self.cursor >= len(self.value):
             return
         new = self.cursor + 1
@@ -132,7 +134,7 @@ class TextInput:
         else:
             self.cursor = new
 
-    def _word_left(self):
+    def _word_left(self) -> None:
         """Move cursor to start of current/previous word. Pastes are atomic."""
         if self.cursor == 0:
             return
@@ -158,7 +160,7 @@ class TextInput:
                 return
             self.cursor -= 1
 
-    def _word_right(self):
+    def _word_right(self) -> None:
         """Move cursor to start of next word. Pastes are atomic."""
         if self.cursor >= len(self.value):
             return
@@ -180,18 +182,18 @@ class TextInput:
 
     # ── Insert / Delete ──────────────────────────────────────────────
 
-    def _insert(self, text: str):
+    def _insert(self, text: str) -> None:
         self._shift_pastes(self.cursor, len(text))
         self.value = self.value[:self.cursor] + text + self.value[self.cursor:]
         self.cursor += len(text)
 
-    def _paste(self, text: str):
+    def _paste(self, text: str) -> None:
         start = self.cursor
         self._insert(text)
         self.pastes.append((start, start + len(text)))
         self.pastes.sort()
 
-    def _backspace(self):
+    def _backspace(self) -> None:
         if self.cursor == 0:
             return
         # If cursor is inside or at the end of a paste, delete the whole paste
@@ -207,14 +209,14 @@ class TextInput:
             self.cursor -= 1
             self._shift_pastes(self.cursor, -1)
 
-    def _clear_line(self):
+    def _clear_line(self) -> None:
         removed = self.cursor
         self.value = self.value[self.cursor:]
         self.pastes = [(s - removed, e - removed) for s, e in self.pastes if e > removed]
         self.pastes = [(max(0, s), e) for s, e in self.pastes if e > s]
         self.cursor = 0
 
-    def _delete_word(self):
+    def _delete_word(self) -> None:
         if self.cursor == 0:
             return
         paste = self._paste_containing(self.cursor)
@@ -245,9 +247,9 @@ class TextInput:
                 return p
         return None
 
-    def _shift_pastes(self, after: int, delta: int):
+    def _shift_pastes(self, after: int, delta: int) -> None:
         """Shift paste ranges. Splits any range that contains the insertion point."""
-        new = []
+        new: list[tuple[int, int]] = []
         for s, e in self.pastes:
             if s >= after:
                 new.append((s + delta, e + delta))

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import time
 from dataclasses import dataclass
 from typing import Literal
@@ -14,11 +16,11 @@ class Notification:
 
 
 class Notifications:
-    def __init__(self, ttl: float = _DEFAULT_TTL):
+    def __init__(self, ttl: float = _DEFAULT_TTL) -> None:
         self._ttl = ttl
         self._items: list[tuple[Notification, float]] = []
 
-    def add(self, text: str, level: Level = "info"):
+    def add(self, text: str, level: Level = "info") -> None:
         self._items.insert(0, (Notification(text, level), time.monotonic()))
 
     def active(self) -> list[Notification]:

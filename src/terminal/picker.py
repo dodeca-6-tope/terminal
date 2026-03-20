@@ -1,5 +1,7 @@
 """Headless fuzzy picker — pure state, no I/O, no styling."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 from terminal.text_input import TextInput
@@ -8,7 +10,7 @@ from terminal.text_input import TextInput
 def _fuzzy_match(query: str, text: str) -> list[int] | None:
     if not query:
         return []
-    indices = []
+    indices: list[int] = []
     qi = 0
     q_lower = query.lower()
     t_lower = text.lower()
@@ -38,7 +40,7 @@ class View:
 class Picker:
     def __init__(
         self,
-        choices: list[dict],
+        choices: list[dict[str, str]],
         *,
         multiselect: bool = False,
         max_height: int = 20,
@@ -49,7 +51,7 @@ class Picker:
         self._qi = TextInput()
         self.cursor = 0
         self.scroll = 0
-        self.selected: set = set()
+        self.selected: set[int] = set()
         self._filtered: list[tuple[int, list[int]]] = []
         self._prev_query = ""
         self._filter()
@@ -66,20 +68,18 @@ class Picker:
         self._filter()
 
     @property
-    def value(self):
+    def value(self) -> list[str] | str | None:
         if self.multiselect:
             return [self.choices[i]["value"] for i in sorted(self.selected)]
         if self._filtered:
             return self.choices[self._filtered[self.cursor][0]]["value"]
         return None
 
-    def handle_key(self, key) -> str | None:
+    def handle_key(self, key: str) -> str | None:
         """Process a key. Returns event name or None.
 
         Events: "select" (enter), "cancel" (esc), "confirm" (ctrl+r).
         """
-        if key is None:
-            return None
         if key == "esc":
             return "cancel"
         if key == "ctrl-r":
@@ -112,7 +112,7 @@ class Picker:
         return None
 
     def view(self) -> View:
-        items = []
+        items: list[Item] = []
         visible_end = min(self.scroll + self.max_height, len(self._filtered))
         for vi in range(self.scroll, visible_end):
             orig_idx, _indices = self._filtered[vi]
@@ -130,7 +130,7 @@ class Picker:
             items=items,
         )
 
-    def _filter(self):
+    def _filter(self) -> None:
         self._filtered = []
         for i, choice in enumerate(self.choices):
             indices = _fuzzy_match(self._qi.value, choice["name"])

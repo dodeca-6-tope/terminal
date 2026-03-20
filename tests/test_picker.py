@@ -1,7 +1,7 @@
 from terminal import Picker
 
 
-def _choices(*names):
+def _choices(*names: str) -> list[dict[str, str]]:
     return [{"name": n, "value": n} for n in names]
 
 
@@ -148,10 +148,6 @@ class TestEvents:
     def test_should_return_none_on_navigation(self):
         p = Picker(_choices("a", "b"))
         assert p.handle_key("down") is None
-
-    def test_should_return_none_on_none_key(self):
-        p = Picker(_choices("a"))
-        assert p.handle_key(None) is None
 
 
 class TestValue:
