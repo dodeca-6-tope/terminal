@@ -2,7 +2,6 @@
 
 from terminal import Flex, Text
 
-
 # ── Basic flow ───────────────────────────────────────────────────────
 
 def test_wrap_single_chunk():

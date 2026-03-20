@@ -1,6 +1,7 @@
 """Headless fuzzy picker — pure state, no I/O, no styling."""
 
 from dataclasses import dataclass
+
 from terminal.text_input import TextInput
 
 
@@ -104,10 +105,9 @@ class Picker:
         elif key == "tab" and self.multiselect:
             if self._filtered:
                 self.selected.symmetric_difference_update({self._filtered[self.cursor][0]})
-        elif self._qi.handle_key(key):
-            if self._qi.value != self._prev_query:
-                self._prev_query = self._qi.value
-                self._filter()
+        elif self._qi.handle_key(key) and self._qi.value != self._prev_query:
+            self._prev_query = self._qi.value
+            self._filter()
 
         return None
 

@@ -1,7 +1,6 @@
 """Tests for TextInput."""
 
-from terminal import TextInput, Paste
-
+from terminal import Paste, TextInput
 
 # ── Basic typing ─────────────────────────────────────────────────────
 

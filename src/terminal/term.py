@@ -3,12 +3,12 @@
 import atexit
 import codecs
 import os
-from dataclasses import dataclass
 import select
 import signal
 import sys
 import termios
 import tty
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
