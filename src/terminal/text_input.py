@@ -26,16 +26,21 @@ class TextInput:
             return f"{text}{self.CURSOR_ON} {self.CURSOR_OFF}"
         return f"{text[:cur]}{self.CURSOR_ON}{text[cur]}{self.CURSOR_OFF}{text[cur + 1:]}"
 
+    @staticmethod
+    def _sanitize(text: str) -> str:
+        """Replace control characters with visible symbols for display."""
+        return text.replace("\r", "↵").replace("\n", "↵").replace("\t", " ")
+
     def _display_text(self) -> str:
         if not self.pastes:
-            return self.value
+            return self._sanitize(self.value)
         parts: list[str] = []
         pos = 0
         for start, end in self.pastes:
-            parts.append(self.value[pos:start])
+            parts.append(self._sanitize(self.value[pos:start]))
             parts.append(self._paste_label(end - start))
             pos = end
-        parts.append(self.value[pos:])
+        parts.append(self._sanitize(self.value[pos:]))
         return "".join(parts)
 
     def _display_cursor(self) -> int:
@@ -64,7 +69,7 @@ class TextInput:
     def handle_key(self, key: str | Paste) -> bool:
         """Process a key or paste event. Returns True if handled, False otherwise."""
         if isinstance(key, Paste):
-            text = key.text.replace("\r\n", " ").replace("\r", " ").replace("\n", " ").replace("\t", " ")
+            text = key.text
             self._paste(text)
             return True
         if key == "left":

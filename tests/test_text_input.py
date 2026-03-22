@@ -300,15 +300,39 @@ def test_paste_then_type_then_backspace():
     ti.handle_key("backspace")  # deletes entire paste
     assert ti.value == ""
 
-def test_paste_with_newlines_converted_to_spaces():
+def test_paste_preserves_newlines():
     ti = TextInput()
     ti.handle_key(Paste("line one\nline two\tline three"))
-    assert ti.value == "line one line two line three"
+    assert ti.value == "line one\nline two\tline three"
 
-def test_paste_with_carriage_returns():
+def test_paste_preserves_carriage_returns():
     ti = TextInput()
     ti.handle_key(Paste("line one\r\nline two"))
-    assert ti.value == "line one line two"
+    assert ti.value == "line one\r\nline two"
+
+def test_display_sanitizes_newlines():
+    ti = TextInput("line one\nline two")
+    assert "↵" in ti.display()
+    assert "\n" not in ti.display()
+
+def test_display_sanitizes_tabs():
+    ti = TextInput("col1\tcol2")
+    assert "\t" not in ti.display()
+
+def test_display_sanitizes_carriage_returns():
+    ti = TextInput("line one\r\nline two")
+    assert "\r" not in ti.display()
+    assert "\n" not in ti.display()
+
+def test_paste_with_newlines_display_cursor_correct():
+    """Cursor should still work after pasting content with newlines."""
+    ti = TextInput()
+    ti.handle_key(Paste("a\nb\nc"))
+    assert ti.cursor == 5
+    assert ti.value == "a\nb\nc"
+    # Display should have paste placeholder, not raw content
+    display = ti.display()
+    assert "\n" not in display
 
 def test_type_then_paste():
     ti = TextInput()
