@@ -48,14 +48,13 @@ class TextInput:
             return self.cursor
         offset = 0
         for start, end in self.pastes:
-            label_len = len(self._paste_label(end - start))
-            real_len = end - start
+            span = end - start
             if self.cursor <= start:
                 break
+            label_len = len(self._paste_label(span))
             if self.cursor >= end:
-                offset += label_len - real_len
+                offset += label_len - span
             else:
-                # Cursor inside a paste — snap to end of label
                 offset += label_len - (self.cursor - start)
                 break
         return max(0, self.cursor + offset)

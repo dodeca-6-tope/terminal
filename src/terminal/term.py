@@ -107,12 +107,10 @@ class Terminal:
         return self._active
 
     def __enter__(self) -> Terminal:
-        fd = sys.stdin.fileno()
-        self._fd = fd
-        self._saved = termios.tcgetattr(fd)
+        self._fd = sys.stdin.fileno()
+        self._saved = termios.tcgetattr(self._fd)
         self._enter_raw()
         self._active = True
-        # Alt screen, hide cursor, bracketed paste, focus events
         sys.stdout.write("\033[?1049h\033[?25l\033[?2004h\033[?1004h")
         sys.stdout.flush()
         self._prev_sigwinch = signal.getsignal(signal.SIGWINCH)
@@ -219,15 +217,13 @@ class Terminal:
     def _read_paste(self, initial: bytes) -> Paste:
         """Read bracketed paste content until \\x1b[201~."""
         assert self._fd is not None
-        fd = self._fd
         buf = bytearray(initial)
-        end = b"\x1b[201~"
         while True:
-            if end in buf:
-                idx = buf.index(end)
+            idx = buf.find(b"\x1b[201~")
+            if idx >= 0:
                 return Paste(buf[:idx].decode("utf-8", errors="replace").replace("\r", "\n"))
-            if select.select([fd], [], [], 0.1)[0]:
-                buf.extend(os.read(fd, 4096))
+            if select.select([self._fd], [], [], 0.1)[0]:
+                buf.extend(os.read(self._fd, 4096))
             else:
                 return Paste(buf.decode("utf-8", errors="replace").replace("\r", "\n"))
 

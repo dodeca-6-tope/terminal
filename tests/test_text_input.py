@@ -560,12 +560,7 @@ def test_left_arrow_skips_paste():
 
 def test_right_arrow_skips_paste():
     """Right arrow at start of paste should jump to end of paste."""
-    ti = TextInput()
-    ti.handle_key("a")
-    ti.handle_key(Paste("hello world pasted"))
-    ti.handle_key("b")
-    assert ti.value == "ahello world pastedb"
-    ti.cursor = 0
+    ti = TextInput("ahello world pastedb", cursor=0, pastes=[(1, 19)])
     ti.handle_key("right")  # a
     assert ti.cursor == 1
     ti.handle_key("right")  # skip paste → 19
