@@ -28,15 +28,13 @@ def test_type_space():
     ti.handle_key("c")
     assert ti.value == "ab c"
 
-def test_type_single_char_returns_true():
+def test_type_char_returns_true_and_preserves():
     ti = TextInput()
     assert ti.handle_key("x") is True
-
-def test_type_preserves_existing_text():
-    ti = TextInput("hello")
-    ti.cursor = 5
-    ti.handle_key("!")
-    assert ti.value == "hello!"
+    ti2 = TextInput("hello")
+    ti2.cursor = 5
+    ti2.handle_key("!")
+    assert ti2.value == "hello!"
 
 def test_type_unicode():
     ti = TextInput()
@@ -80,13 +78,10 @@ def test_home_end():
     ti.handle_key("end")
     assert ti.cursor == 11
 
-def test_home_on_empty():
+def test_home_end_on_empty():
     ti = TextInput()
     ti.handle_key("home")
     assert ti.cursor == 0
-
-def test_end_on_empty():
-    ti = TextInput()
     ti.handle_key("end")
     assert ti.cursor == 0
 
@@ -113,14 +108,10 @@ def test_word_right():
     ti.handle_key("word-right")
     assert ti.cursor == 15  # stays at end
 
-def test_word_left_single_word():
+def test_word_nav_single_word():
     ti = TextInput("hello")
     ti.handle_key("word-left")
     assert ti.cursor == 0
-
-def test_word_right_single_word():
-    ti = TextInput("hello")
-    ti.cursor = 0
     ti.handle_key("word-right")
     assert ti.cursor == 5
 
@@ -172,15 +163,12 @@ def test_backspace_middle():
     assert ti.value == "ac"
     assert ti.cursor == 1
 
-def test_backspace_all():
+def test_backspace_all_and_empty():
     ti = TextInput("ab")
     ti.handle_key("backspace")
     ti.handle_key("backspace")
     assert ti.value == ""
     assert ti.cursor == 0
-
-def test_backspace_empty():
-    ti = TextInput()
     ti.handle_key("backspace")
     assert ti.value == ""
     assert ti.cursor == 0
@@ -195,15 +183,13 @@ def test_clear_line():
     assert ti.value == "world"
     assert ti.cursor == 0
 
-def test_clear_line_at_start():
+def test_clear_line_boundaries():
     ti = TextInput("hello")
     ti.cursor = 0
     ti.handle_key("clear-line")
     assert ti.value == "hello"
     assert ti.cursor == 0
-
-def test_clear_line_at_end():
-    ti = TextInput("hello")
+    ti.cursor = 5
     ti.handle_key("clear-line")
     assert ti.value == ""
     assert ti.cursor == 0
@@ -214,15 +200,13 @@ def test_delete_word():
     assert ti.value == "hello "
     assert ti.cursor == 6
 
-def test_delete_word_at_start():
+def test_delete_word_boundaries():
     ti = TextInput("hello")
     ti.cursor = 0
     ti.handle_key("delete-word")
     assert ti.value == "hello"
     assert ti.cursor == 0
-
-def test_delete_word_single_word():
-    ti = TextInput("hello")
+    ti.cursor = 5
     ti.handle_key("delete-word")
     assert ti.value == ""
     assert ti.cursor == 0
@@ -300,29 +284,22 @@ def test_paste_then_type_then_backspace():
     ti.handle_key("backspace")  # deletes entire paste
     assert ti.value == ""
 
-def test_paste_preserves_newlines():
+def test_paste_preserves_control_chars():
     ti = TextInput()
     ti.handle_key(Paste("line one\nline two\tline three"))
     assert ti.value == "line one\nline two\tline three"
+    ti2 = TextInput()
+    ti2.handle_key(Paste("line one\r\nline two"))
+    assert ti2.value == "line one\r\nline two"
 
-def test_paste_preserves_carriage_returns():
-    ti = TextInput()
-    ti.handle_key(Paste("line one\r\nline two"))
-    assert ti.value == "line one\r\nline two"
-
-def test_display_sanitizes_newlines():
+def test_display_sanitizes_control_chars():
     ti = TextInput("line one\nline two")
     assert "↵" in ti.display()
     assert "\n" not in ti.display()
-
-def test_display_sanitizes_tabs():
-    ti = TextInput("col1\tcol2")
-    assert "\t" not in ti.display()
-
-def test_display_sanitizes_carriage_returns():
-    ti = TextInput("line one\r\nline two")
-    assert "\r" not in ti.display()
-    assert "\n" not in ti.display()
+    assert "\t" not in TextInput("col1\tcol2").display()
+    ti2 = TextInput("line one\r\nline two")
+    assert "\r" not in ti2.display()
+    assert "\n" not in ti2.display()
 
 def test_paste_with_newlines_display_cursor_correct():
     """Cursor should still work after pasting content with newlines."""
@@ -372,18 +349,15 @@ def test_multiple_pastes():
     ti.handle_key("backspace")  # deletes first paste
     assert ti.value == ""
 
-def test_paste_empty_string():
+def test_paste_edge_cases():
     ti = TextInput("hello")
     ti.handle_key(Paste(""))
     assert ti.value == "hello"
     assert ti.cursor == 5
-
-def test_paste_single_char():
-    """Single char paste is still tracked as paste."""
-    ti = TextInput()
-    ti.handle_key(Paste("x"))
-    assert ti.value == "x"
-    assert len(ti.pastes) == 1
+    ti2 = TextInput()
+    ti2.handle_key(Paste("x"))
+    assert ti2.value == "x"
+    assert len(ti2.pastes) == 1
 
 def test_paste_preserves_value_after_clear():
     ti = TextInput()
@@ -439,24 +413,15 @@ def test_display_typed_around_paste():
 
 # ── Unknown keys ─────────────────────────────────────────────────────
 
-def test_unknown_key_returns_false():
+def test_unknown_keys():
     ti = TextInput()
-    assert ti.handle_key("up") is False
-    assert ti.handle_key("down") is False
-    assert ti.handle_key("tab") is False
-    assert ti.handle_key("esc") is False
-    assert ti.handle_key("enter") is False
-    assert ti.handle_key("ctrl-r") is False
-    assert ti.handle_key("focus") is False
-    assert ti.handle_key("shift-tab") is False
-
-def test_unknown_key_doesnt_modify_value():
-    ti = TextInput("hello")
-    ti.handle_key("up")
-    ti.handle_key("down")
-    ti.handle_key("tab")
-    assert ti.value == "hello"
-    assert ti.cursor == 5
+    for key in ["up", "down", "tab", "esc", "enter", "ctrl-r", "focus", "shift-tab"]:
+        assert ti.handle_key(key) is False
+    ti2 = TextInput("hello")
+    for key in ["up", "down", "tab"]:
+        ti2.handle_key(key)
+    assert ti2.value == "hello"
+    assert ti2.cursor == 5
 
 
 # ── Paste navigation ────────────────────────────────────────────────
@@ -636,21 +601,19 @@ def test_rapid_backspace_on_empty():
     assert ti.value == ""
     assert ti.cursor == 0
 
-def test_cursor_never_negative():
+def test_cursor_stays_in_bounds():
     ti = TextInput("a")
     ti.cursor = 0
     ti.handle_key("left")
     ti.handle_key("word-left")
     ti.handle_key("home")
     assert ti.cursor == 0
-
-def test_cursor_never_exceeds_length():
-    ti = TextInput("abc")
-    ti.handle_key("right")
-    ti.handle_key("right")
-    ti.handle_key("word-right")
-    ti.handle_key("end")
-    assert ti.cursor == 3
+    ti2 = TextInput("abc")
+    ti2.handle_key("right")
+    ti2.handle_key("right")
+    ti2.handle_key("word-right")
+    ti2.handle_key("end")
+    assert ti2.cursor == 3
 
 def test_paste_then_clear_line_then_type():
     ti = TextInput()
