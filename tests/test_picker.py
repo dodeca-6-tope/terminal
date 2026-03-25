@@ -6,16 +6,12 @@ def _choices(*names: str) -> list[dict[str, str]]:
 
 
 class TestInit:
-    def test_should_show_all_choices_initially(self):
+    def test_initial_state(self):
         p = Picker(_choices("alpha", "beta", "gamma"))
         v = p.view()
         assert v.total == 3
         assert v.filtered == 3
         assert len(v.items) == 3
-
-    def test_should_place_cursor_on_first_item(self):
-        p = Picker(_choices("alpha", "beta"))
-        v = p.view()
         assert v.items[0].cursor is True
         assert v.items[1].cursor is False
 
@@ -27,26 +23,17 @@ class TestInit:
 
 
 class TestNavigation:
-    def test_should_move_cursor_down(self):
+    def test_cursor_movement(self):
         p = Picker(_choices("a", "b", "c"))
         p.handle_key("down")
-        v = p.view()
-        assert v.items[1].cursor is True
-
-    def test_should_move_cursor_up(self):
-        p = Picker(_choices("a", "b", "c"))
-        p.handle_key("down")
+        assert p.view().items[1].cursor is True
         p.handle_key("up")
-        v = p.view()
-        assert v.items[0].cursor is True
+        assert p.view().items[0].cursor is True
 
-    def test_should_not_move_above_first_item(self):
+    def test_cursor_boundaries(self):
         p = Picker(_choices("a", "b"))
         p.handle_key("up")
         assert p.cursor == 0
-
-    def test_should_not_move_below_last_item(self):
-        p = Picker(_choices("a", "b"))
         p.handle_key("down")
         p.handle_key("down")
         assert p.cursor == 1
@@ -133,20 +120,11 @@ class TestSelection:
 
 
 class TestEvents:
-    def test_should_return_select_on_enter(self):
-        p = Picker(_choices("a"))
-        assert p.handle_key("enter") == "select"
-
-    def test_should_return_cancel_on_esc(self):
-        p = Picker(_choices("a"))
-        assert p.handle_key("esc") == "cancel"
-
-    def test_should_return_confirm_on_ctrl_r(self):
-        p = Picker(_choices("a"))
-        assert p.handle_key("ctrl-r") == "confirm"
-
-    def test_should_return_none_on_navigation(self):
+    def test_event_keys(self):
         p = Picker(_choices("a", "b"))
+        assert p.handle_key("enter") == "select"
+        assert p.handle_key("esc") == "cancel"
+        assert p.handle_key("ctrl-r") == "confirm"
         assert p.handle_key("down") is None
 
 
@@ -171,28 +149,19 @@ class TestValue:
 
 
 class TestQuerySetter:
-    def test_should_set_query_and_refilter(self):
+    def test_query_property(self):
         p = Picker(_choices("apple", "banana", "apricot"))
         p.query = "ap"
-        v = p.view()
-        assert v.filtered == 2
-
-    def test_should_reset_to_all_with_empty_query(self):
-        p = Picker(_choices("a", "b"))
-        p.query = "x"
-        p.query = ""
         assert p.view().filtered == 2
+        p.query = ""
+        assert p.view().filtered == 3
 
 
 class TestView:
-    def test_should_limit_items_to_max_height(self):
+    def test_view_limits_and_query(self):
         p = Picker(_choices("a", "b", "c", "d", "e"), max_height=3)
-        v = p.view()
-        assert len(v.items) == 3
-
-    def test_should_include_query_display(self):
-        p = Picker(_choices("a"))
-        p.handle_key("h")
-        p.handle_key("i")
-        v = p.view()
-        assert "hi" in v.query
+        assert len(p.view().items) == 3
+        p2 = Picker(_choices("a"))
+        p2.handle_key("h")
+        p2.handle_key("i")
+        assert "hi" in p2.view().query

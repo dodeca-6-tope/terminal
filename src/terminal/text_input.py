@@ -48,14 +48,12 @@ class TextInput:
             return self.cursor
         offset = 0
         for start, end in self.pastes:
-            span = end - start
             if self.cursor <= start:
                 break
-            label_len = len(self._paste_label(span))
-            if self.cursor >= end:
-                offset += label_len - span
-            else:
-                offset += label_len - (self.cursor - start)
+            span = end - start
+            adj = span if self.cursor >= end else (self.cursor - start)
+            offset += len(self._paste_label(span)) - adj
+            if self.cursor < end:
                 break
         return max(0, self.cursor + offset)
 
@@ -181,14 +179,12 @@ class TextInput:
     def _backspace(self) -> None:
         if self.cursor == 0:
             return
-        # If cursor is inside or at the end of a paste, delete the whole paste
         paste = self._find_paste(self.cursor, include_end=True)
         if paste:
-            start, end = paste
             self.pastes.remove(paste)
-            self.value = self.value[:start] + self.value[end:]
-            self._shift_pastes(start, -(end - start))
-            self.cursor = start
+            self.value = self.value[:paste[0]] + self.value[paste[1]:]
+            self._shift_pastes(paste[0], -(paste[1] - paste[0]))
+            self.cursor = paste[0]
         else:
             self.value = self.value[:self.cursor - 1] + self.value[self.cursor:]
             self.cursor -= 1

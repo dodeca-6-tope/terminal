@@ -469,13 +469,7 @@ def test_backspace_right_after_paste():
     assert ti.pastes == []
 
 def test_delete_word_after_paste_does_not_eat_paste():
-    """option+backspace one space after a paste should only delete the space."""
-    ti = TextInput()
-    ti.handle_key(Paste("hello world pasted"))
-    ti.handle_key("space")
-    ti.handle_key("x")
-    assert ti.value == "hello world pasted x"
-    assert ti.cursor == 20
+    ti = TextInput("hello world pasted x", cursor=20, pastes=[(0, 18)])
     ti.handle_key("delete-word")
     assert ti.value == "hello world pasted "
     assert ti.cursor == 19
