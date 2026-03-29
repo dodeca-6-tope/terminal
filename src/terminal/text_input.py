@@ -148,15 +148,21 @@ class TextInput:
             self.cursor -= 1
 
     def _word_right(self) -> None:
-        """Move cursor to start of next word. Pastes are atomic."""
+        """Move cursor to end of current/next word. Pastes are atomic."""
         if self.cursor >= len(self.value):
             return
-        paste = self._paste_at(self.cursor)
+        paste = self._find_paste(self.cursor)
+        if not paste:
+            for p in self.pastes:
+                if p.start == self.cursor:
+                    paste = p
+                    break
         if paste:
             self.cursor = paste.end
-        self._skip_non_space_right()
+            return
         while self.cursor < len(self.value) and self.value[self.cursor] == " ":
             self.cursor += 1
+        self._skip_non_space_right()
 
     def _skip_non_space_right(self) -> None:
         """Advance cursor past non-space characters, jumping over pastes."""

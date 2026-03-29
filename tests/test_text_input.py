@@ -100,11 +100,11 @@ def test_word_right():
     ti = TextInput("hello world foo")
     ti.cursor = 0
     ti.handle_key("word-right")
-    assert ti.cursor == 6   # on 'w' of "world"
+    assert ti.cursor == 5   # end of "hello"
     ti.handle_key("word-right")
-    assert ti.cursor == 12  # on 'f' of "foo"
+    assert ti.cursor == 11  # end of "world"
     ti.handle_key("word-right")
-    assert ti.cursor == 15  # end
+    assert ti.cursor == 15  # end of "foo"
     ti.handle_key("word-right")
     assert ti.cursor == 15  # stays at end
 
@@ -126,7 +126,7 @@ def test_word_right_multiple_spaces():
     ti = TextInput("hello   world")
     ti.cursor = 0
     ti.handle_key("word-right")
-    assert ti.cursor == 8   # on 'w' of "world"
+    assert ti.cursor == 5   # end of "hello"
 
 def test_word_left_from_middle_of_word():
     ti = TextInput("hello world")
@@ -138,7 +138,7 @@ def test_word_right_from_middle_of_word():
     ti = TextInput("hello world")
     ti.cursor = 2  # on 'l' of "hello"
     ti.handle_key("word-right")
-    assert ti.cursor == 6   # on 'w' of "world"
+    assert ti.cursor == 5   # end of "hello"
 
 
 # ── Backspace ────────────────────────────────────────────────────────
@@ -558,12 +558,41 @@ def test_word_right_skips_paste():
         ti.handle_key(c)
     assert ti.value == "hi pasted content here bye"
     ti.cursor = 0
-    ti.handle_key("word-right")  # start of paste
-    assert ti.cursor == 3
-    ti.handle_key("word-right")  # skip paste → 'b' of "bye"
-    assert ti.cursor == 23
-    ti.handle_key("word-right")  # end
+    ti.handle_key("word-right")  # end of "hi"
+    assert ti.cursor == 2
+    ti.handle_key("word-right")  # skip paste → end of paste
+    assert ti.cursor == 22
+    ti.handle_key("word-right")  # end of "bye"
     assert ti.cursor == 26
+
+def test_word_right_paste_at_start():
+    """word-right from pos 0 when paste starts at 0 should stop at paste end."""
+    ti = TextInput()
+    ti.handle_key(Paste("hello"))
+    for c in " world":
+        ti.handle_key(c)
+    ti.cursor = 0
+    ti.handle_key("word-right")
+    assert ti.cursor == 5   # end of paste, not 11
+    ti.handle_key("word-right")
+    assert ti.cursor == 11  # end of "world"
+
+def test_word_right_doesnt_stick_at_paste_end():
+    """After landing at paste.end, next word-right must advance past the space."""
+    ti = TextInput()
+    for c in "a ":
+        ti.handle_key(c)
+    ti.handle_key(Paste("bb"))
+    for c in " c":
+        ti.handle_key(c)
+    # value = "a bb c", paste = [2,4)
+    ti.cursor = 0
+    ti.handle_key("word-right")
+    assert ti.cursor == 1   # end of "a"
+    ti.handle_key("word-right")
+    assert ti.cursor == 4   # end of paste
+    ti.handle_key("word-right")
+    assert ti.cursor == 6   # end of "c"
 
 def test_left_right_no_paste():
     """Normal left/right should work as before without pastes."""

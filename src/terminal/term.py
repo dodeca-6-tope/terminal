@@ -30,10 +30,10 @@ _BYTE_KEYS: dict[bytes, str] = {
     b"\t": "tab",
     b"\r": "enter",
     b"\n": "enter",
-    b"\x01": "ctrl-a",
+    b"\x01": "home",
     b"\x02": "ctrl-b",
     b"\x04": "ctrl-d",
-    b"\x05": "ctrl-e",
+    b"\x05": "end",
     b"\x06": "ctrl-f",
     b"\x07": "ctrl-g",
     b"\x0b": "ctrl-k",
@@ -74,6 +74,14 @@ _ESC_KEYS: dict[bytes, str] = {
     b"b": "word-left",
     b"f": "word-right",
     b"d": "delete-word",
+}
+
+# \x1b\x1b[X → key name  (double-escape Option+arrow on some terminals)
+_DBL_ESC_KEYS: dict[bytes, str] = {
+    b"C": "word-right",
+    b"D": "word-left",
+    b"A": "up",
+    b"B": "down",
 }
 
 # \x1b[1;{mod}{dir} → key name  (modifier arrow sequences)
@@ -200,7 +208,7 @@ class Terminal:
             return self._parse_csi(seq[1:])
         # Double escape: \x1b\x1b[X — Option+arrow on some terminals
         if seq[:1] == b"\x1b" and len(seq) >= 3:
-            return _CSI_KEYS.get(seq[2:3])
+            return _DBL_ESC_KEYS.get(seq[2:3])
         # Alt/Option + key
         return _ESC_KEYS.get(seq[:1])
 
