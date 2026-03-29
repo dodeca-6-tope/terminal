@@ -231,14 +231,16 @@ class TextInput:
         """Shift paste ranges. Splits any range that contains the insertion point."""
         new: list[PasteRange] = []
         for p in self.pastes:
-            if p.start >= after:
-                new.append(PasteRange(p.start + delta, p.end + delta))
-            elif p.end > after:
-                if delta > 0:
-                    new.append(PasteRange(p.start, after))
-                    new.append(PasteRange(after + delta, p.end + delta))
-                else:
-                    new.append(PasteRange(p.start, p.end + delta))
-            else:
-                new.append(p)
+            new.extend(self._shift_one(p, after, delta))
         self.pastes = [p for p in new if p.end > p.start]
+
+    @staticmethod
+    def _shift_one(p: PasteRange, after: int, delta: int) -> list[PasteRange]:
+        if p.start >= after:
+            return [PasteRange(p.start + delta, p.end + delta)]
+        if p.end <= after:
+            return [p]
+        # Range spans the edit point
+        if delta > 0:
+            return [PasteRange(p.start, after), PasteRange(after + delta, p.end + delta)]
+        return [PasteRange(p.start, p.end + delta)]
