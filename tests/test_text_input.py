@@ -1,6 +1,6 @@
 """Tests for TextInput."""
 
-from terminal import Paste, TextInput
+from terminal import Paste, PasteRange, TextInput
 
 # ── Basic typing ─────────────────────────────────────────────────────
 
@@ -435,7 +435,7 @@ def test_type_at_paste_start():
     ti.handle_key("x")
     assert ti.value == "xhello world pasted"
     assert ti.cursor == 1
-    assert ti.pastes == [(1, 19)]
+    assert ti.pastes == [PasteRange(1, 19)]
 
 def test_paste_at_cursor_between_typed_text():
     ti = TextInput()
@@ -469,14 +469,14 @@ def test_backspace_right_after_paste():
     assert ti.pastes == []
 
 def test_delete_word_after_paste_does_not_eat_paste():
-    ti = TextInput("hello world pasted x", cursor=20, pastes=[(0, 18)])
+    ti = TextInput("hello world pasted x", cursor=20, pastes=[PasteRange(0, 18)])
     ti.handle_key("delete-word")
     assert ti.value == "hello world pasted "
     assert ti.cursor == 19
     ti.handle_key("delete-word")
     assert ti.value == "hello world pasted"
     assert ti.cursor == 18
-    assert ti.pastes == [(0, 18)]
+    assert ti.pastes == [PasteRange(0, 18)]
 
 def test_delete_word_at_paste_end():
     """delete-word at end of paste deletes entire paste."""
@@ -519,7 +519,7 @@ def test_left_arrow_skips_paste():
 
 def test_right_arrow_skips_paste():
     """Right arrow at start of paste should jump to end of paste."""
-    ti = TextInput("ahello world pastedb", cursor=0, pastes=[(1, 19)])
+    ti = TextInput("ahello world pastedb", cursor=0, pastes=[PasteRange(1, 19)])
     ti.handle_key("right")  # a
     assert ti.cursor == 1
     ti.handle_key("right")  # skip paste → 19
@@ -646,23 +646,23 @@ def test_multiple_operations_sequence():
 
 def test_init_with_pastes():
     """Restoring a TextInput with paste ranges preserves display behavior."""
-    ti = TextInput("hello world pasted text", cursor=22, pastes=[(12, 22)])
+    ti = TextInput("hello world pasted text", cursor=22, pastes=[PasteRange(12, 22)])
     assert ti.value == "hello world pasted text"
     assert ti.cursor == 22
-    assert ti.pastes == [(12, 22)]
+    assert ti.pastes == [PasteRange(12, 22)]
     display = ti.display()
     assert "[Pasted +" in display
     assert "pasted tex" not in display
 
 def test_init_with_pastes_backspace_deletes_paste():
-    ti = TextInput("abpasted textc", cursor=13, pastes=[(2, 13)])
+    ti = TextInput("abpasted textc", cursor=13, pastes=[PasteRange(2, 13)])
     ti.handle_key("backspace")
     assert ti.value == "abc"
     assert ti.cursor == 2
 
 def test_init_with_pastes_navigation():
     """Arrow keys skip over restored paste ranges."""
-    ti = TextInput("apasted textb", cursor=13, pastes=[(1, 12)])
+    ti = TextInput("apasted textb", cursor=13, pastes=[PasteRange(1, 12)])
     ti.handle_key("left")  # b → end of paste
     assert ti.cursor == 12
     ti.handle_key("left")  # skip paste → 1
@@ -682,15 +682,15 @@ def test_init_with_cursor():
     assert ti.cursor == 3
 
 def test_init_with_multiple_pastes():
-    ti = TextInput("first paste second paste", pastes=[(0, 11), (12, 24)])
+    ti = TextInput("first paste second paste", pastes=[PasteRange(0, 11), PasteRange(12, 24)])
     display = ti.display()
     assert "[Pasted +" in display
     assert "first paste" not in display
     ti.handle_key("backspace")  # deletes second paste
     assert ti.value == "first paste "
-    assert ti.pastes == [(0, 11)]
+    assert ti.pastes == [PasteRange(0, 11)]
 
 def test_init_pastes_sorted():
     """Pastes provided out of order are sorted."""
-    ti = TextInput("aabbcc", pastes=[(4, 6), (0, 2)])
-    assert ti.pastes == [(0, 2), (4, 6)]
+    ti = TextInput("aabbcc", pastes=[PasteRange(4, 6), PasteRange(0, 2)])
+    assert ti.pastes == [PasteRange(0, 2), PasteRange(4, 6)]

@@ -24,8 +24,6 @@ class Text:
         return f"Text({self._raw!r})"
 
     def __add__(self, other: object) -> Text:
-        if isinstance(other, Text):
-            return Text(self._raw + other._raw)
         return Text(self._raw + str(other))
 
     def __radd__(self, other: object) -> Text:

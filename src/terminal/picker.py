@@ -21,6 +21,12 @@ def _fuzzy_match(query: str, text: str) -> list[int] | None:
     return indices if qi == len(q_lower) else None
 
 
+@dataclass(frozen=True, slots=True)
+class Choice:
+    name: str
+    value: str
+
+
 @dataclass
 class Item:
     name: str
@@ -31,23 +37,21 @@ class Item:
 @dataclass
 class View:
     query: str
-    total: int
     filtered: int
-    selected: int
     items: list[Item]
 
 
 class Picker:
     def __init__(
         self,
-        choices: list[dict[str, str]],
+        choices: list[Choice],
         *,
         multiselect: bool = False,
         max_height: int = 20,
     ):
-        self.choices = choices
-        self.multiselect = multiselect
-        self.max_height = max_height
+        self._choices = choices
+        self._multiselect = multiselect
+        self._max_height = max_height
         self._qi = TextInput()
         self.cursor = 0
         self.scroll = 0
@@ -69,10 +73,10 @@ class Picker:
 
     @property
     def value(self) -> list[str] | str | None:
-        if self.multiselect:
-            return [self.choices[i]["value"] for i in sorted(self.selected)]
+        if self._multiselect:
+            return [self._choices[i].value for i in sorted(self.selected)]
         if self._filtered:
-            return self.choices[self._filtered[self.cursor][0]]["value"]
+            return self._choices[self._filtered[self.cursor][0]].value
         return None
 
     _EVENTS: dict[str, str] = {"esc": "cancel", "ctrl-r": "confirm", "enter": "select"}
@@ -92,14 +96,14 @@ class Picker:
         elif key == "down":
             if self.cursor < len(self._filtered) - 1:
                 self.cursor += 1
-                if self.cursor >= self.scroll + self.max_height:
-                    self.scroll = self.cursor - self.max_height + 1
-        elif key == "shift-tab" and self.multiselect:
+                if self.cursor >= self.scroll + self._max_height:
+                    self.scroll = self.cursor - self._max_height + 1
+        elif key == "shift-tab" and self._multiselect:
             if self.selected:
                 self.selected.clear()
             else:
                 self.selected.update(i for i, _ in self._filtered)
-        elif key == "tab" and self.multiselect:
+        elif key == "tab" and self._multiselect:
             if self._filtered:
                 self.selected.symmetric_difference_update({self._filtered[self.cursor][0]})
         elif self._qi.handle_key(key) and self._qi.value != self._prev_query:
@@ -109,28 +113,26 @@ class Picker:
 
     def view(self) -> View:
         items: list[Item] = []
-        visible_end = min(self.scroll + self.max_height, len(self._filtered))
+        visible_end = min(self.scroll + self._max_height, len(self._filtered))
         for vi in range(self.scroll, visible_end):
             orig_idx, _indices = self._filtered[vi]
             items.append(Item(
-                name=self.choices[orig_idx]["name"],
+                name=self._choices[orig_idx].name,
                 cursor=vi == self.cursor,
                 selected=orig_idx in self.selected,
             ))
 
         return View(
             query=self._qi.display(),
-            total=len(self.choices),
             filtered=len(self._filtered),
-            selected=len(self.selected),
             items=items,
         )
 
     def _filter(self) -> None:
         self._filtered = []
-        for i, choice in enumerate(self.choices):
-            indices = _fuzzy_match(self._qi.value, choice["name"])
+        for i, choice in enumerate(self._choices):
+            indices = _fuzzy_match(self._qi.value, choice.name)
             if indices is not None:
                 self._filtered.append((i, indices))
         self.cursor = min(self.cursor, max(0, len(self._filtered) - 1))
-        self.scroll = min(self.scroll, max(0, len(self._filtered) - self.max_height))
+        self.scroll = min(self.scroll, max(0, len(self._filtered) - self._max_height))

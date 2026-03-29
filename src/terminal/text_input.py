@@ -2,16 +2,25 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from terminal.term import Paste
+
+
+@dataclass(frozen=True, order=True)
+class PasteRange:
+    """A half-open [start, end) range marking pasted content in the buffer."""
+    start: int
+    end: int
 
 
 class TextInput:
     """Editable text buffer that tracks paste ranges for display."""
 
-    def __init__(self, value: str = "", cursor: int | None = None, pastes: list[tuple[int, int]] | None = None) -> None:
+    def __init__(self, value: str = "", cursor: int | None = None, pastes: list[PasteRange] | None = None) -> None:
         self.value = value
         self.cursor = cursor if cursor is not None else len(value)
-        self.pastes: list[tuple[int, int]] = sorted(pastes) if pastes else []
+        self.pastes: list[PasteRange] = sorted(pastes) if pastes else []
 
     # ── Display ──────────────────────────────────────────────────────
 
@@ -36,10 +45,10 @@ class TextInput:
             return self._sanitize(self.value)
         parts: list[str] = []
         pos = 0
-        for start, end in self.pastes:
-            parts.append(self._sanitize(self.value[pos:start]))
-            parts.append(self._paste_label(end - start))
-            pos = end
+        for p in self.pastes:
+            parts.append(self._sanitize(self.value[pos:p.start]))
+            parts.append(self._paste_label(p.end - p.start))
+            pos = p.end
         parts.append(self._sanitize(self.value[pos:]))
         return "".join(parts)
 
@@ -47,13 +56,13 @@ class TextInput:
         if not self.pastes:
             return self.cursor
         offset = 0
-        for start, end in self.pastes:
-            if self.cursor <= start:
+        for p in self.pastes:
+            if self.cursor <= p.start:
                 break
-            span = end - start
-            adj = span if self.cursor >= end else (self.cursor - start)
+            span = p.end - p.start
+            adj = span if self.cursor >= p.end else (self.cursor - p.start)
             offset += len(self._paste_label(span)) - adj
-            if self.cursor < end:
+            if self.cursor < p.end:
                 break
         return max(0, self.cursor + offset)
 
@@ -63,44 +72,33 @@ class TextInput:
 
     # ── Mutations ────────────────────────────────────────────────────
 
-    _KEY_ACTIONS: dict[str, str] = {
-        "left": "_move_left",
-        "right": "_move_right",
-        "word-left": "_word_left",
-        "word-right": "_word_right",
-        "backspace": "_backspace",
-        "clear-line": "_clear_line",
-        "delete-word": "_delete_word",
-    }
-
     def handle_key(self, key: str | Paste) -> bool:
         """Process a key or paste event. Returns True if handled, False otherwise."""
         if isinstance(key, Paste):
             self._paste(key.text)
             return True
-        action = self._KEY_ACTIONS.get(key)
-        if action:
-            getattr(self, action)()
-            return True
-        if key == "home":
-            self.cursor = 0
-        elif key == "end":
-            self.cursor = len(self.value)
-        elif key == "space":
-            self._insert(" ")
-        elif len(key) == 1 and key.isprintable():
-            self._insert(key)
-        else:
-            return False
+        match key:
+            case "left":       self._move_left()
+            case "right":      self._move_right()
+            case "word-left":  self._word_left()
+            case "word-right": self._word_right()
+            case "backspace":  self._backspace()
+            case "clear-line": self._clear_line()
+            case "delete-word": self._delete_word()
+            case "home":       self.cursor = 0
+            case "end":        self.cursor = len(self.value)
+            case "space":      self._insert(" ")
+            case c if len(c) == 1 and c.isprintable(): self._insert(c)
+            case _:            return False
         return True
 
     # ── Navigation ───────────────────────────────────────────────────
 
-    def _find_paste(self, pos: int, *, include_end: bool = False) -> tuple[int, int] | None:
+    def _find_paste(self, pos: int, *, include_end: bool = False) -> PasteRange | None:
         """Return paste range containing pos. With include_end, also matches pos == end."""
-        for s, e in self.pastes:
-            if s < pos < e or (include_end and s < pos == e):
-                return (s, e)
+        for p in self.pastes:
+            if p.start < pos < p.end or (include_end and p.start < pos == p.end):
+                return p
         return None
 
     def _move_left(self) -> None:
@@ -108,14 +106,14 @@ class TextInput:
             return
         new = self.cursor - 1
         paste = self._find_paste(new)
-        self.cursor = paste[0] if paste else new
+        self.cursor = paste.start if paste else new
 
     def _move_right(self) -> None:
         if self.cursor >= len(self.value):
             return
         new = self.cursor + 1
         paste = self._find_paste(new)
-        self.cursor = paste[1] if paste else new
+        self.cursor = paste.end if paste else new
 
     def _word_left(self) -> None:
         """Move cursor to start of current/previous word. Pastes are atomic."""
@@ -123,19 +121,19 @@ class TextInput:
             return
         paste = self._find_paste(self.cursor, include_end=True)
         if paste:
-            self.cursor = paste[0]
+            self.cursor = paste.start
             return
         self.cursor -= 1
         while self.cursor > 0 and self.value[self.cursor] == " ":
             p = self._find_paste(self.cursor)
             if p:
-                self.cursor = p[0]
+                self.cursor = p.start
                 return
             self.cursor -= 1
         while self.cursor > 0 and self.value[self.cursor - 1] != " ":
             p = self._find_paste(self.cursor - 1)
             if p:
-                self.cursor = p[0]
+                self.cursor = p.start
                 return
             self.cursor -= 1
 
@@ -145,16 +143,16 @@ class TextInput:
             return
         paste = self._find_paste(self.cursor, include_end=True)
         if not paste:
-            for s, e in self.pastes:
-                if s == self.cursor:
-                    paste = (s, e)
+            for p in self.pastes:
+                if p.start == self.cursor:
+                    paste = p
                     break
         if paste:
-            self.cursor = paste[1]
+            self.cursor = paste.end
         while self.cursor < len(self.value) and self.value[self.cursor] != " ":
-            for s, e in self.pastes:
-                if s == self.cursor:
-                    self.cursor = e
+            for p in self.pastes:
+                if p.start == self.cursor:
+                    self.cursor = p.end
                     break
             else:
                 self.cursor += 1
@@ -173,7 +171,7 @@ class TextInput:
     def _paste(self, text: str) -> None:
         start = self.cursor
         self._insert(text)
-        self.pastes.append((start, start + len(text)))
+        self.pastes.append(PasteRange(start, start + len(text)))
         self.pastes.sort()
 
     def _backspace(self) -> None:
@@ -182,9 +180,9 @@ class TextInput:
         paste = self._find_paste(self.cursor, include_end=True)
         if paste:
             self.pastes.remove(paste)
-            self.value = self.value[:paste[0]] + self.value[paste[1]:]
-            self._shift_pastes(paste[0], -(paste[1] - paste[0]))
-            self.cursor = paste[0]
+            self.value = self.value[:paste.start] + self.value[paste.end:]
+            self._shift_pastes(paste.start, -(paste.end - paste.start))
+            self.cursor = paste.start
         else:
             self.value = self.value[:self.cursor - 1] + self.value[self.cursor:]
             self.cursor -= 1
@@ -193,8 +191,8 @@ class TextInput:
     def _clear_line(self) -> None:
         removed = self.cursor
         self.value = self.value[self.cursor:]
-        self.pastes = [(s - removed, e - removed) for s, e in self.pastes if e > removed]
-        self.pastes = [(max(0, s), e) for s, e in self.pastes if e > s]
+        shifted = [PasteRange(p.start - removed, p.end - removed) for p in self.pastes if p.end > removed]
+        self.pastes = [PasteRange(max(0, p.start), p.end) for p in shifted if p.end > max(0, p.start)]
         self.cursor = 0
 
     def _delete_word(self) -> None:
@@ -208,33 +206,31 @@ class TextInput:
         before = self.value[:self.cursor].rstrip()
         cut_pos = before.rfind(" ") + 1 if " " in before else 0
         # Clamp to the end of any paste that sits between cut_pos and cursor
-        for s, e in self.pastes:
-            if s < self.cursor and e > cut_pos and e <= self.cursor:
-                cut_pos = e
+        for p in self.pastes:
+            if p.start < self.cursor and p.end > cut_pos and p.end <= self.cursor:
+                cut_pos = p.end
         removed = self.cursor - cut_pos
         if removed == 0:
             return
         self.value = self.value[:cut_pos] + self.value[self.cursor:]
         self.cursor = cut_pos
         self._shift_pastes(cut_pos, -removed)
-        self.pastes = [(s, e) for s, e in self.pastes if e > s]
+        self.pastes = [p for p in self.pastes if p.end > p.start]
 
     # ── Paste range helpers ──────────────────────────────────────────
 
     def _shift_pastes(self, after: int, delta: int) -> None:
         """Shift paste ranges. Splits any range that contains the insertion point."""
-        new: list[tuple[int, int]] = []
-        for s, e in self.pastes:
-            if s >= after:
-                new.append((s + delta, e + delta))
-            elif e > after:
-                # Insertion inside this paste — split around the insertion
+        new: list[PasteRange] = []
+        for p in self.pastes:
+            if p.start >= after:
+                new.append(PasteRange(p.start + delta, p.end + delta))
+            elif p.end > after:
                 if delta > 0:
-                    new.append((s, after))
-                    new.append((after + delta, e + delta))
+                    new.append(PasteRange(p.start, after))
+                    new.append(PasteRange(after + delta, p.end + delta))
                 else:
-                    # Deletion inside paste — shrink it
-                    new.append((s, e + delta))
+                    new.append(PasteRange(p.start, p.end + delta))
             else:
-                new.append((s, e))
-        self.pastes = [(s, e) for s, e in new if e > s]
+                new.append(p)
+        self.pastes = [p for p in new if p.end > p.start]

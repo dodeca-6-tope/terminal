@@ -1,15 +1,14 @@
-from terminal import Picker
+from terminal import Choice, Picker
 
 
-def _choices(*names: str) -> list[dict[str, str]]:
-    return [{"name": n, "value": n} for n in names]
+def _choices(*names: str) -> list[Choice]:
+    return [Choice(name=n, value=n) for n in names]
 
 
 class TestInit:
     def test_initial_state(self):
         p = Picker(_choices("alpha", "beta", "gamma"))
         v = p.view()
-        assert v.total == 3
         assert v.filtered == 3
         assert len(v.items) == 3
         assert v.items[0].cursor is True
@@ -18,7 +17,6 @@ class TestInit:
     def test_should_start_with_no_selection(self):
         p = Picker(_choices("a", "b"), multiselect=True)
         v = p.view()
-        assert v.selected == 0
         assert all(not item.selected for item in v.items)
 
 
@@ -90,7 +88,7 @@ class TestSelection:
         p.handle_key("tab")
         v = p.view()
         assert v.items[0].selected is True
-        assert v.selected == 1
+        assert sum(i.selected for i in v.items) == 1
 
     def test_should_deselect_with_second_tab(self):
         p = Picker(_choices("a", "b"), multiselect=True)
@@ -103,7 +101,6 @@ class TestSelection:
         p = Picker(_choices("a", "b", "c"), multiselect=True)
         p.handle_key("shift-tab")
         v = p.view()
-        assert v.selected == 3
         assert all(item.selected for item in v.items)
 
     def test_should_deselect_all_with_shift_tab_when_any_selected(self):
@@ -111,7 +108,7 @@ class TestSelection:
         p.handle_key("tab")
         p.handle_key("shift-tab")
         v = p.view()
-        assert v.selected == 0
+        assert not any(item.selected for item in v.items)
 
     def test_should_ignore_tab_when_not_multiselect(self):
         p = Picker(_choices("a", "b"))
