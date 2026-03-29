@@ -157,26 +157,28 @@ class Terminal:
         """Read a single keypress. Returns None on timeout (1/60s) or resize."""
         assert self._fd is not None
         fd = self._fd
-        if self._resized:
-            self._resized = False
+        if self._consume_resize():
             return "resize"
         try:
             ready = select.select([fd], [], [], 1 / 60)[0]
         except InterruptedError:
-            if self._resized:
-                self._resized = False
-                return "resize"
-            return None
+            return "resize" if self._consume_resize() else None
         if not ready:
             return None
         ch = os.read(fd, 1)
         if ch == b"\x1b":
             return self._read_escape(fd)
         if ch == b"\x03": raise KeyboardInterrupt
-        hit = _BYTE_KEYS.get(ch)
-        if hit:
-            return hit
-        result = self._utf8.decode(ch)
+        return _BYTE_KEYS.get(ch) or self._read_utf8(fd, ch)
+
+    def _consume_resize(self) -> bool:
+        if self._resized:
+            self._resized = False
+            return True
+        return False
+
+    def _read_utf8(self, fd: int, initial: bytes) -> str | None:
+        result = self._utf8.decode(initial)
         while not result:
             if not select.select([fd], [], [], 0.01)[0]:
                 self._utf8.reset()
