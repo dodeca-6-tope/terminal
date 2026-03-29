@@ -107,8 +107,9 @@ class Terminal:
         return self._active
 
     def __enter__(self) -> Terminal:
-        self._fd = sys.stdin.fileno()
-        self._saved = termios.tcgetattr(self._fd)
+        fd = sys.stdin.fileno()
+        self._fd = fd
+        self._saved = termios.tcgetattr(fd)
         self._enter_raw()
         self._active = True
         sys.stdout.write("\033[?1049h\033[?25l\033[?2004h\033[?1004h")
