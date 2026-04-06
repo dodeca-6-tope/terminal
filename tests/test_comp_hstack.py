@@ -1,6 +1,7 @@
 """Tests for HStack component."""
 
-from terminal import Text, cond, hstack, spacer, text, vstack
+from terminal import Text, cond, hstack, scroll, spacer, text, vstack
+from terminal.components.scroll import ScrollState
 from terminal.measure import strip_ansi
 
 
@@ -169,3 +170,71 @@ def test_invalid_justify_raises():
 
     with pytest.raises(ValueError, match="unknown justify"):
         hstack(text("x"), justify="spread")
+
+
+# ── Height propagation ─────────────────────────────────────────────
+
+
+def clean(lines: list[str]) -> list[str]:
+    return [strip_ansi(l) for l in lines]
+
+
+def test_height_passed_to_scroll_child():
+    """HStack should forward height to children with flex_grow_height."""
+    s = ScrollState()
+    view = vstack(
+        hstack(
+            scroll(*[text(str(i)) for i in range(20)], state=s),
+            text("R"),
+        ),
+    )
+    lines = view.render(20, 10)
+    assert len(lines) == 10
+    # Scroll should have received the height and rendered its content
+    assert s.height == 10
+
+
+def test_height_not_passed_to_fixed_child():
+    """Children without flex_grow_height should not receive height."""
+    s = ScrollState()
+    view = vstack(
+        hstack(
+            scroll(*[text(str(i)) for i in range(20)], state=s),
+            text("side"),
+        ),
+    )
+    lines = view.render(40, 8)
+    # Scroll fills 8 rows, text("side") is 1 row — HStack pads shorter columns
+    assert len(lines) == 8
+    assert s.height == 8
+
+
+def test_flex_grow_height_excludes_spacer():
+    """HStack with only spacer children should not claim flex_grow_height."""
+    h = hstack(text("a"), spacer(), text("b"))
+    assert h.flex_grow_height() is False
+
+
+def test_flex_grow_height_true_with_scroll():
+    """HStack with a scroll child should claim flex_grow_height."""
+    s = ScrollState()
+    h = hstack(scroll(text("a"), state=s), text("b"))
+    assert h.flex_grow_height() is True
+
+
+def test_hstack_in_vstack_scroll_gets_remaining_height():
+    """Scroll inside HStack inside VStack should get the remaining height."""
+    s = ScrollState()
+    view = vstack(
+        text("header"),
+        hstack(
+            scroll(*[text(str(i)) for i in range(50)], state=s),
+        ),
+        text("footer"),
+    )
+    lines = view.render(20, 12)
+    assert len(lines) == 12
+    # header=1, footer=1, scroll gets 10
+    assert s.height == 10
+    assert clean(lines)[0] == "header"
+    assert clean(lines)[11] == "footer"

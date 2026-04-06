@@ -13,6 +13,7 @@ from terminal.components.input import (
 from terminal.components.keyed import Keyed
 from terminal.components.list import List, ListState, list
 from terminal.components.scroll import Scroll, ScrollState, scroll
+from terminal.components.scrollbar import Scrollbar, scrollbar, scrollbar_default
 from terminal.components.spacer import Spacer, spacer
 from terminal.components.table import Table, TableRow, table, table_row
 from terminal.components.text import Text, text
@@ -31,6 +32,7 @@ __all__ = [
     "PasteRange",
     "display_text",
     "Scroll",
+    "Scrollbar",
     "ScrollState",
     "Spacer",
     "Table",
@@ -50,6 +52,8 @@ __all__ = [
     "input",
     "list",
     "scroll",
+    "scrollbar",
+    "scrollbar_default",
     "spacer",
     "table",
     "table_row",

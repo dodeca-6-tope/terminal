@@ -94,21 +94,36 @@ class KeyReader:
         self._fd = fd
         self._wake_fd = wake_fd
         self._utf8 = codecs.getincrementaldecoder("utf-8")("ignore")
+        self._buf = bytearray()
 
-    def read(self, timeout: float = 1 / 60) -> str | Paste | None:
-        """Read a single keypress. Returns None on timeout or wake."""
+    def _fill(self, timeout: float) -> bool:
+        """Wait up to timeout for data, then drain all available bytes into _buf."""
+        if self._buf:
+            return True
         fds = [self._fd] if self._wake_fd is None else [self._fd, self._wake_fd]
         try:
             ready = select.select(fds, [], [], timeout)[0]
         except InterruptedError:
-            return None
+            return False
         if self._wake_fd is not None and self._wake_fd in ready:
             os.read(self._wake_fd, 1024)
-        if self._fd not in ready:
-            return None
-        return self._classify(os.read(self._fd, 1))
+        if self._fd in ready:
+            self._buf.extend(os.read(self._fd, 4096))
+        return bool(self._buf)
 
-    def _classify(self, ch: bytes) -> str | Paste | None:
+    def _consume(self, n: int = 1) -> bytes:
+        out = bytes(self._buf[:n])
+        del self._buf[:n]
+        return out
+
+    def read(self, timeout: float = 1 / 60) -> str | Paste | None:
+        """Read a single keypress. Returns None on timeout or wake."""
+        if not self._fill(timeout):
+            return None
+        return self._classify()
+
+    def _classify(self) -> str | Paste | None:
+        ch = self._consume()
         if ch == b"\x1b":
             return self._read_escape()
         if ch == b"\x03":
@@ -118,42 +133,60 @@ class KeyReader:
     def _read_utf8(self, initial: bytes) -> str | None:
         result = self._utf8.decode(initial)
         while not result:
-            if not select.select([self._fd], [], [], 0.01)[0]:
+            if not self._fill(0.01):
                 self._utf8.reset()
                 return None
-            result = self._utf8.decode(os.read(self._fd, 1))
+            result = self._utf8.decode(self._consume())
         return result
 
     def _read_escape(self) -> str | Paste | None:
-        """Parse an escape sequence into a key name."""
-        if not select.select([self._fd], [], [], 0.02)[0]:
+        """Parse an escape sequence from the buffer."""
+        if not self._fill(0.004):
             return "esc"
-        seq = os.read(self._fd, 16)
         # Bracketed paste
-        if seq.startswith(b"[200~"):
-            return self._read_paste(seq[5:])
+        if self._buf[:5] == b"[200~":
+            del self._buf[:5]
+            return self._read_paste()
         # CSI sequence: \x1b[...
-        if seq[:1] == b"[":
-            return parse_csi(seq[1:])
+        if self._buf[:1] == b"[":
+            del self._buf[:1]
+            return self._read_csi()
         # Double escape: \x1b\x1b[X — Option+arrow on some terminals
-        if seq[:1] == b"\x1b" and len(seq) >= 3:
-            return DBL_ESC_KEYS.get(seq[2:3])
+        if self._buf[:2] == b"\x1b[" and len(self._buf) >= 3:
+            del self._buf[:2]
+            return DBL_ESC_KEYS.get(self._consume())
         # Alt/Option + key
-        return ESC_KEYS.get(seq[:1])
+        return ESC_KEYS.get(self._consume())
 
-    def _read_paste(self, initial: bytes) -> Paste:
+    def _read_csi(self) -> str | None:
+        """Read a complete CSI sequence from the buffer and parse it."""
+        # CSI sequences end with a byte in 0x40–0x7E (@ through ~)
+        for i in range(len(self._buf)):
+            if 0x40 <= self._buf[i] <= 0x7E:
+                seq = self._consume(i + 1)
+                return parse_csi(seq)
+        # Incomplete — wait for more bytes
+        if self._fill(0.004):
+            for i in range(len(self._buf)):
+                if 0x40 <= self._buf[i] <= 0x7E:
+                    seq = self._consume(i + 1)
+                    return parse_csi(seq)
+        # Give up, consume what we have
+        seq = self._consume(len(self._buf))
+        return parse_csi(seq)
+
+    def _read_paste(self) -> Paste:
         """Read bracketed paste content until \\x1b[201~."""
-        buf = bytearray(initial)
         while True:
-            idx = buf.find(b"\x1b[201~")
+            idx = self._buf.find(b"\x1b[201~")
             if idx >= 0:
-                return Paste(
-                    buf[:idx].decode("utf-8", errors="replace").replace("\r", "\n")
-                )
-            if select.select([self._fd], [], [], 0.1)[0]:
-                buf.extend(os.read(self._fd, 4096))
-            else:
-                return Paste(buf.decode("utf-8", errors="replace").replace("\r", "\n"))
+                text = bytes(self._buf[:idx]).decode("utf-8", errors="replace").replace("\r", "\n")
+                del self._buf[:idx + 6]
+                return Paste(text)
+            if not self._fill(0.1):
+                text = bytes(self._buf).decode("utf-8", errors="replace").replace("\r", "\n")
+                self._buf.clear()
+                return Paste(text)
 
 
 def parse_csi(csi: bytes) -> str | None:

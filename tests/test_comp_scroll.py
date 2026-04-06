@@ -1,8 +1,8 @@
 """Tests for Scroll component."""
 
-from terminal import box, scroll, text, vstack
+from terminal import box, hstack, scroll, scrollbar, scrollbar_default, text, vstack
 from terminal.components.scroll import ScrollState
-from terminal.measure import strip_ansi
+from terminal.measure import display_width, strip_ansi
 
 
 def clean(lines: list[str]) -> list[str]:
@@ -156,12 +156,6 @@ def test_flex_grow_when_child_grows():
     s = _state()
     sc = scroll(text("x", max_width="fill"), state=s, height=5)
     assert sc.flex_grow() is True
-
-
-def test_no_flex_grow_when_none_grow():
-    s = _state()
-    sc = scroll(text("a"), text("b"), state=s, height=5)
-    assert sc.flex_grow() is False
 
 
 def test_flex_grow_height_fill():
@@ -549,3 +543,255 @@ def test_scroll_to_visible_at_bottom_edge():
     s.offset = 5
     s.scroll_to_visible(9)
     assert s.offset == 5  # exactly at bottom edge, still visible
+
+
+# ── Follow mode ────────────────────────────────────────────────────
+
+
+def test_follow_disabled_by_default():
+    s = ScrollState()
+    assert s.follow is False
+
+
+def test_follow_sticks_to_bottom():
+    s = ScrollState(follow=True)
+    items = [text(str(i)) for i in range(10)]
+    scroll(*items, state=s, height=3).render(80)
+    assert s.offset == 7  # max_offset = 10 - 3
+
+    # Add more items — follow should track
+    items.extend(text(str(i)) for i in range(10, 20))
+    scroll(*items, state=s, height=3).render(80)
+    assert s.offset == 17  # max_offset = 20 - 3
+
+
+def test_scroll_up_disables_follow():
+    s = ScrollState(follow=True)
+    scroll(*[text(str(i)) for i in range(10)], state=s, height=3).render(80)
+    s.scroll_up(2)
+    assert s.follow is False
+    assert s.offset == 5
+
+    # Re-render — should NOT jump to bottom
+    scroll(*[text(str(i)) for i in range(10)], state=s, height=3).render(80)
+    assert s.offset == 5
+
+
+def test_follow_reengages_at_bottom():
+    s = ScrollState(follow=True)
+    scroll(*[text(str(i)) for i in range(10)], state=s, height=3).render(80)
+    s.scroll_up(2)
+    assert s.follow is False
+
+    # Scroll back down to bottom
+    s.scroll_down(2)
+    scroll(*[text(str(i)) for i in range(10)], state=s, height=3).render(80)
+    assert s.follow is True
+
+
+def test_follow_with_growing_content():
+    s = ScrollState(follow=True)
+    items = [text(str(i)) for i in range(5)]
+    scroll(*items, state=s, height=3).render(80)
+    assert s.offset == 2  # following bottom
+
+    # User scrolls up
+    s.scroll_up(1)
+    assert s.follow is False
+
+    # Content grows — should stay at user's position
+    items.extend([text(str(i)) for i in range(5, 10)])
+    scroll(*items, state=s, height=3).render(80)
+    assert s.offset == 1  # didn't jump
+
+
+def test_page_up_disables_follow():
+    s = ScrollState()
+    s.height = 5
+    s.total = 20
+    s.offset = 15
+    s.page_up()
+    assert s.follow is False
+
+
+def test_scroll_down_does_not_disable_follow():
+    s = ScrollState()
+    s.follow = True
+    s.height = 5
+    s.total = 20
+    s.scroll_down(3)
+    assert s.follow is True  # scroll_down should not set follow=False
+
+
+# ── Scrollbar component ────────────────────────────────────────────
+
+
+def test_scrollbar_returns_one_char_wide():
+    s = _state()
+    scroll(*[text(str(i)) for i in range(20)], state=s, height=5).render(80)
+    lines = scrollbar(state=s).render(1, 5)
+    assert len(lines) == 5
+    for line in lines:
+        assert display_width(line) == 1
+
+
+def test_scrollbar_empty_when_content_fits():
+    s = _state()
+    scroll(text("a"), text("b"), state=s, height=5).render(80)
+    lines = scrollbar(state=s).render(1, 5)
+    assert all(line == "" for line in lines)
+
+
+def test_scrollbar_thumb_moves_with_offset():
+    items = [text(str(i)) for i in range(100)]
+
+    s1 = _state(0)
+    scroll(*items, state=s1, height=10).render(80)
+    bar_top = [strip_ansi(l) for l in scrollbar(state=s1).render(1, 10)]
+
+    s2 = _state(90)
+    scroll(*items, state=s2, height=10).render(80)
+    bar_bot = [strip_ansi(l) for l in scrollbar(state=s2).render(1, 10)]
+
+    assert bar_top != bar_bot
+
+
+def test_scrollbar_composes_with_hstack():
+    s = _state()
+    view = vstack(
+        hstack(
+            scroll(*[text(str(i)) for i in range(20)], state=s),
+            scrollbar(state=s),
+        ),
+    )
+    lines = view.render(20, 5)
+    assert len(lines) == 5
+
+
+def test_scrollbar_custom_render_fn():
+    def my_bar(h: int, total: int, offset: int) -> list[str]:
+        return ["X"] * h
+
+    s = _state()
+    scroll(*[text(str(i)) for i in range(20)], state=s, height=3).render(80)
+    lines = scrollbar(state=s, render_fn=my_bar).render(1, 3)
+    assert lines == ["X", "X", "X"]
+
+
+def test_scrollbar_default_fn_directly():
+    col = scrollbar_default(10, 100, 0)
+    assert len(col) == 10
+    # Thumb should be near the top
+    assert any(strip_ansi(c) == "┃" for c in col[:3])
+
+
+def test_scrollbar_default_at_bottom():
+    col = scrollbar_default(10, 100, 90)
+    assert len(col) == 10
+    # Thumb should be near the bottom
+    assert any(strip_ansi(c) == "┃" for c in col[-3:])
+
+
+def test_scrollbar_default_content_fits():
+    col = scrollbar_default(10, 5, 0)
+    # No scrollbar needed — all empty
+    assert all(c == "" for c in col)
+
+
+def test_scrollbar_default_single_row():
+    col = scrollbar_default(1, 100, 0)
+    assert len(col) == 1
+    assert strip_ansi(col[0]) == "┃"
+
+
+def test_scrollbar_default_monotonic():
+    """Thumb position should only move forward as offset increases."""
+    def thumb_top(offset: int) -> int:
+        col = scrollbar_default(20, 200, offset)
+        for i, c in enumerate(col):
+            if strip_ansi(c) == "┃":
+                return i
+        return 20
+
+    positions = [thumb_top(o) for o in range(0, 181, 10)]
+    # Should be monotonically non-decreasing
+    for i in range(1, len(positions)):
+        assert positions[i] >= positions[i - 1]
+
+
+# ── scroll_to_top / scroll_to_bottom follow interaction ───────────
+
+
+def test_scroll_to_top_disables_follow():
+    s = ScrollState(follow=True)
+    s.height = 5
+    s.total = 20
+    s.offset = 15
+    s.scroll_to_top()
+    assert s.offset == 0
+    assert s.follow is False
+
+
+def test_scroll_to_bottom_enables_follow():
+    s = ScrollState()
+    s.height = 5
+    s.total = 20
+    s.scroll_to_bottom()
+    assert s.offset == 15
+    assert s.follow is True
+
+
+def test_scroll_always_grows_horizontally():
+    s = ScrollState()
+    sc = scroll(text("short"), state=s, height=5)
+    assert sc.flex_grow() is True
+
+
+# ── Scroll + Scrollbar end-to-end ─────────────────────────────────
+
+
+def test_scroll_and_scrollbar_share_state():
+    """Scrollbar reads from same state that Scroll writes to."""
+    s = ScrollState()
+    items = [text(str(i)) for i in range(50)]
+    # Scroll writes height/total/offset
+    scroll(*items, state=s, height=10).render(80)
+    assert s.height == 10
+    assert s.total == 50
+    # Scrollbar reads them
+    bar = scrollbar(state=s).render(1, 10)
+    assert len(bar) == 10
+    assert any(strip_ansi(c) == "┃" for c in bar)
+
+
+def test_follow_tracks_growing_content_end_to_end():
+    """Simulates streaming content: follow keeps viewport at bottom."""
+    s = ScrollState(follow=True)
+    items = [text(str(i)) for i in range(5)]
+    result = clean(scroll(*items, state=s, height=3).render(80))
+    assert result == ["2", "3", "4"]
+
+    # Add more content
+    items.extend(text(str(i)) for i in range(5, 15))
+    result = clean(scroll(*items, state=s, height=3).render(80))
+    assert result == ["12", "13", "14"]
+
+    # User scrolls up — follow disengages
+    s.scroll_up(5)
+    result = clean(scroll(*items, state=s, height=3).render(80))
+    assert result == ["7", "8", "9"]
+
+    # Content grows — viewport stays
+    items.extend(text(str(i)) for i in range(15, 25))
+    result = clean(scroll(*items, state=s, height=3).render(80))
+    assert result == ["7", "8", "9"]
+
+    # User hits End — follow re-engages
+    s.scroll_to_bottom()
+    result = clean(scroll(*items, state=s, height=3).render(80))
+    assert result == ["22", "23", "24"]
+
+    # Content grows — follows again
+    items.extend(text(str(i)) for i in range(25, 30))
+    result = clean(scroll(*items, state=s, height=3).render(80))
+    assert result == ["27", "28", "29"]

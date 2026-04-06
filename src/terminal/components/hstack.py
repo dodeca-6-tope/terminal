@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from terminal.components.base import Component
+from terminal.components.spacer import Spacer
 from terminal.measure import display_width
 from terminal.screen import pad
 
@@ -49,7 +50,7 @@ class HStack(Component):
     def render(self, width: int, height: int | None = None) -> list[str]:
         if self._wrap:
             return self._render_wrap(width)
-        return self._render_fixed(width)
+        return self._render_fixed(width, height)
 
     def _render_wrap(self, width: int) -> list[str]:
         if not self.children:
@@ -57,7 +58,7 @@ class HStack(Component):
         strs = [" ".join(c.render(width)) for c in self.children]
         return _wrap_chunks(strs, width, self._spacing)
 
-    def _render_fixed(self, width: int) -> list[str]:
+    def _render_fixed(self, width: int, height: int | None = None) -> list[str]:
         active = self._active()
         if not active:
             return [""]
@@ -74,7 +75,10 @@ class HStack(Component):
                 col_widths[i] += per + (1 if k < extra else 0)
             remaining = 0
 
-        columns = [c.render(col_widths[i]) for i, c in enumerate(active)]
+        columns = [
+            c.render(col_widths[i], height) if c.flex_grow_height() else c.render(col_widths[i])
+            for i, c in enumerate(active)
+        ]
         max_rows = max((len(col) for col in columns), default=0)
 
         lines: list[str] = []
@@ -118,6 +122,12 @@ class HStack(Component):
 
     def flex_grow(self) -> bool:
         return self._justify != "start" or any(c.flex_grow() for c in self.children)
+
+    def flex_grow_height(self) -> bool:
+        return any(
+            c.flex_grow_height() for c in self.children
+            if not isinstance(c, Spacer)
+        )
 
 
 def hstack(
