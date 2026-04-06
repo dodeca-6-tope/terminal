@@ -12,7 +12,7 @@ class Message:
     level: str = "info"
 
 
-class Toast:
+class ToastState:
     """Queue of timed messages. Expired messages are pruned automatically."""
 
     def __init__(self, ttl: float = 3) -> None:

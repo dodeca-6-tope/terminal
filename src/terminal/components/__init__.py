@@ -15,7 +15,7 @@ from terminal.components.scroll import Scroll, ScrollState, scroll
 from terminal.components.spacer import Spacer, spacer
 from terminal.components.table import Table, TableRow, table, table_row
 from terminal.components.text import Text, text
-from terminal.components.toast import Message, Toast
+from terminal.components.toast import Message, ToastState
 from terminal.components.vstack import VStack, vstack
 from terminal.components.zstack import ZStack, zstack
 
@@ -38,7 +38,7 @@ __all__ = [
     "List",
     "ListState",
     "Message",
-    "Toast",
+    "ToastState",
     "VStack",
     "ZStack",
     "box",

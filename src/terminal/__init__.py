@@ -8,7 +8,7 @@ from terminal.components import (
     ScrollState,
     TableRow,
     Text,
-    Toast,
+    ToastState,
     box,
     cond,
     display_text,
@@ -58,7 +58,7 @@ __all__ = [
     "InputBuffer",
     "list",
     "ListState",
-    "Toast",
+    "ToastState",
     "vstack",
     "zstack",
 ]

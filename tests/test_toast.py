@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from terminal.components.toast import Toast
+from terminal.components.toast import ToastState
 
 
 def test_show_and_active():
-    t = Toast()
+    t = ToastState()
     t.show("hello")
     msgs = t.active()
     assert len(msgs) == 1
@@ -15,7 +15,7 @@ def test_show_and_active():
 
 
 def test_multiple_active():
-    t = Toast()
+    t = ToastState()
     t.show("first")
     t.show("second")
     msgs = t.active()
@@ -23,7 +23,7 @@ def test_multiple_active():
 
 
 def test_expired_pruned():
-    t = Toast(ttl=1)
+    t = ToastState(ttl=1)
     with patch("terminal.components.toast.time") as mock_time:
         mock_time.monotonic.return_value = 0.0
         t.show("old")
@@ -35,7 +35,7 @@ def test_expired_pruned():
 
 
 def test_custom_duration():
-    t = Toast(ttl=1)
+    t = ToastState(ttl=1)
     with patch("terminal.components.toast.time") as mock_time:
         mock_time.monotonic.return_value = 0.0
         t.show("short", duration=0.5)
@@ -46,13 +46,13 @@ def test_custom_duration():
 
 
 def test_level():
-    t = Toast()
+    t = ToastState()
     t.show("fail", level="error")
     assert t.active()[0].level == "error"
 
 
 def test_visible():
-    t = Toast(ttl=1)
+    t = ToastState(ttl=1)
     assert not t.visible
     with patch("terminal.components.toast.time") as mock_time:
         mock_time.monotonic.return_value = 0.0
@@ -63,5 +63,5 @@ def test_visible():
 
 
 def test_empty_active():
-    t = Toast()
+    t = ToastState()
     assert t.active() == []
