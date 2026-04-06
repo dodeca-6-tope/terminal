@@ -53,45 +53,6 @@ class S:
     render_time: float = 0.0
 
 
-def _torus_grid(width: int, height: int, a: float, b: float) -> list[str]:
-    grid = [[" "] * width for _ in range(height)]
-    zbuf = [[0.0] * width for _ in range(height)]
-    k1 = width * K2 * 0.4 / (R1 + R2)
-    cos_a, sin_a = math.cos(a), math.sin(a)
-    cos_b, sin_b = math.cos(b), math.sin(b)
-
-    theta = 0.0
-    while theta < 6.28:
-        cos_t, sin_t = math.cos(theta), math.sin(theta)
-        phi = 0.0
-        while phi < 6.28:
-            cos_p, sin_p = math.cos(phi), math.sin(phi)
-            cx = R2 + R1 * cos_t
-            cy = R1 * sin_t
-            x = cx * (cos_b * cos_p + sin_a * sin_b * sin_p) - cy * cos_a * sin_b
-            y = cx * (sin_b * cos_p - sin_a * cos_b * sin_p) + cy * cos_a * cos_b
-            z = K2 + cos_a * cx * sin_p + cy * sin_a
-            ooz = 1.0 / z
-            xp = int(width / 2 + k1 * ooz * x)
-            yp = int(height / 2 - k1 * ooz * y * 0.5)
-            lum = (
-                cos_p * cos_t * sin_b
-                - cos_a * cos_t * sin_p
-                - sin_a * sin_t
-                + cos_b * (cos_a * sin_t - cos_t * sin_a * sin_p)
-            )
-            if 0 <= xp < width and 0 <= yp < height and ooz > zbuf[yp][xp]:
-                zbuf[yp][xp] = ooz
-                li = max(0, min(len(SHADE) - 1, int(lum * 8)))
-                ci = max(
-                    0, min(len(COLORS) - 1, int((lum + 1) / 2 * (len(COLORS) - 1)))
-                )
-                grid[yp][xp] = f"\033[38;5;{COLORS[ci]}m{SHADE[li]}\033[0m"
-            phi += 0.04
-        theta += 0.07
-    return ["".join(row) for row in grid]
-
-
 class _Torus(t.Component):
     def __init__(self, a: float, b: float) -> None:
         self._a = a
@@ -104,7 +65,44 @@ class _Torus(t.Component):
         return True
 
     def render(self, width: int, height: int | None = None) -> list[str]:
-        return _torus_grid(width, height or 20, self._a, self._b)
+        height = height or 20
+        grid = [[" "] * width for _ in range(height)]
+        zbuf = [[0.0] * width for _ in range(height)]
+        k1 = width * K2 * 0.4 / (R1 + R2)
+        cos_a, sin_a = math.cos(self._a), math.sin(self._a)
+        cos_b, sin_b = math.cos(self._b), math.sin(self._b)
+
+        theta = 0.0
+        while theta < 6.28:
+            cos_t, sin_t = math.cos(theta), math.sin(theta)
+            phi = 0.0
+            while phi < 6.28:
+                cos_p, sin_p = math.cos(phi), math.sin(phi)
+                cx = R2 + R1 * cos_t
+                cy = R1 * sin_t
+                x = cx * (cos_b * cos_p + sin_a * sin_b * sin_p) - cy * cos_a * sin_b
+                y = cx * (sin_b * cos_p - sin_a * cos_b * sin_p) + cy * cos_a * cos_b
+                z = K2 + cos_a * cx * sin_p + cy * sin_a
+                ooz = 1.0 / z
+                xp = int(width / 2 + k1 * ooz * x)
+                yp = int(height / 2 - k1 * ooz * y * 0.5)
+                lum = (
+                    cos_p * cos_t * sin_b
+                    - cos_a * cos_t * sin_p
+                    - sin_a * sin_t
+                    + cos_b * (cos_a * sin_t - cos_t * sin_a * sin_p)
+                )
+                if 0 <= xp < width and 0 <= yp < height and ooz > zbuf[yp][xp]:
+                    zbuf[yp][xp] = ooz
+                    li = max(0, min(len(SHADE) - 1, int(lum * 8)))
+                    ci = max(
+                        0,
+                        min(len(COLORS) - 1, int((lum + 1) / 2 * (len(COLORS) - 1))),
+                    )
+                    grid[yp][xp] = f"\033[38;5;{COLORS[ci]}m{SHADE[li]}\033[0m"
+                phi += 0.04
+            theta += 0.07
+        return ["".join(row) for row in grid]
 
 
 def view(s: S) -> t.Component:
@@ -177,8 +175,8 @@ def view(s: S) -> t.Component:
 
 if __name__ == "__main__":
     s = S()
-    term = t.TTY()
-    with term:
+
+    with t.TTY() as term:
         while True:
             # tick
             if not s.paused:
@@ -187,9 +185,7 @@ if __name__ == "__main__":
 
             # render
             t0 = time.perf_counter()
-            size = term.size
-            tree = view(s)
-            term.render(tree.render(size.columns, size.lines))
+            term.render(view(s).render(term.size.columns, term.size.lines))
             s.render_time = time.perf_counter() - t0
 
             # input (timeout = remaining frame budget @ ~60fps)

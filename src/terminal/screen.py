@@ -11,26 +11,39 @@ from terminal.measure import char_width, display_width
 
 def clip_and_pad(line: str, cols: int) -> str:
     """Clip to cols visible characters and pad with spaces to exactly cols."""
-    if "\033" not in line:
-        if line.isascii():
-            if len(line) <= cols:
-                return line + " " * (cols - len(line)) if len(line) < cols else line
-            return line[:cols]
-        return _clip_pad_scan(line, cols)
+    if "\033" not in line and line.isascii():
+        n = len(line)
+        return line[:cols] if n >= cols else line + " " * (cols - n)
     return _clip_pad_scan(line, cols)
 
 
+def clip(line: str, max_width: int) -> str:
+    """Clip a line to max_width visible characters, preserving ANSI escapes."""
+    if "\033" not in line and line.isascii():
+        return line[:max_width] if len(line) > max_width else line
+    return _clip_scan(line, max_width)
+
+
+def _ansi_end(line: str, pos: int) -> int:
+    """If pos starts a CSI escape, return position after it. Else return pos."""
+    if line[pos] != "\033":
+        return pos
+    n = len(line)
+    if pos + 1 >= n or line[pos + 1] != "[":
+        return pos
+    end = pos + 2
+    while end < n and line[end] != "m":
+        end += 1
+    return end + 1
+
+
 def _clip_pad_scan(line: str, cols: int) -> str:
-    """Scan visible width, clip if over, pad if under."""
     visible = 0
     pos = 0
-    n = len(line)
-    while pos < n:
-        if line[pos] == "\033" and pos + 1 < n and line[pos + 1] == "[":
-            end = pos + 2
-            while end < n and line[end] != "m":
-                end += 1
-            pos = end + 1
+    while pos < len(line):
+        end = _ansi_end(line, pos)
+        if end != pos:
+            pos = end
             continue
         visible += char_width(line[pos])
         if visible > cols:
@@ -41,25 +54,13 @@ def _clip_pad_scan(line: str, cols: int) -> str:
     return line
 
 
-def clip(line: str, max_width: int) -> str:
-    """Clip a line to max_width visible characters, preserving ANSI escapes."""
-    if "\033" not in line:
-        if line.isascii():
-            return line[:max_width] if len(line) > max_width else line
-        return _clip_scan(line, max_width)
-    return _clip_scan(line, max_width)
-
-
 def _clip_scan(line: str, max_width: int) -> str:
     visible = 0
     pos = 0
-    n = len(line)
-    while pos < n:
-        if line[pos] == "\033" and pos + 1 < n and line[pos + 1] == "[":
-            end = pos + 2
-            while end < n and line[end] != "m":
-                end += 1
-            pos = end + 1
+    while pos < len(line):
+        end = _ansi_end(line, pos)
+        if end != pos:
+            pos = end
             continue
         visible += char_width(line[pos])
         if visible > max_width:

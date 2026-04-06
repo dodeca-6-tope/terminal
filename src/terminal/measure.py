@@ -22,7 +22,7 @@ def char_width(ch: str) -> int:
 def display_width(s: str) -> int:
     if "\033" not in s:
         return len(s) if s.isascii() else _width_plain(s)
-    return _width_ansi(s)
+    return _width_plain(ANSI_RE.sub("", s))
 
 
 def _width_plain(s: str) -> int:
@@ -32,25 +32,6 @@ def _width_plain(s: str) -> int:
         cw = wcwidth(ch)
         if cw > 0:
             w += cw
-    return w
-
-
-def _width_ansi(s: str) -> int:
-    """Width of a string with ANSI codes — skip escapes, sum wcwidth."""
-    w = 0
-    i = 0
-    n = len(s)
-    while i < n:
-        if s[i] == "\033" and i + 1 < n and s[i + 1] == "[":
-            i += 2
-            while i < n and s[i] != "m":
-                i += 1
-            i += 1
-            continue
-        cw = wcwidth(s[i])
-        if cw > 0:
-            w += cw
-        i += 1
     return w
 
 

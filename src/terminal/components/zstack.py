@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from terminal.components.base import Component
-from terminal.measure import char_width, display_width
+from terminal.measure import ANSI_RE, char_width, display_width
 
 
 class ZStack(Component):
@@ -84,22 +84,12 @@ def _active_ansi(s: str) -> str:
     if "\033" not in s:
         return ""
     codes: list[str] = []
-    i = 0
-    n = len(s)
-    while i < n:
-        if s[i] == "\033" and i + 1 < n and s[i + 1] == "[":
-            start = i + 2
-            end = start
-            while end < n and s[end] != "m":
-                end += 1
-            params = s[start:end]
-            if params in ("0", ""):
-                codes.clear()
-            else:
-                codes.append(params)
-            i = end + 1
+    for m in ANSI_RE.finditer(s):
+        params = m.group()[2:-1]
+        if params in ("0", ""):
+            codes.clear()
         else:
-            i += 1
+            codes.append(params)
     return f"\033[{';'.join(codes)}m" if codes else ""
 
 

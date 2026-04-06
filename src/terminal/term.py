@@ -38,18 +38,21 @@ class TTY:
         self._fd: int | None = None
         self._saved: list[Any] | None = None
         self._active = False
-        self._atexit = False
         self._resized = False
         self._prev_sigwinch: Callable[[int, FrameType | None], Any] | int | None = None
         self._keys: KeyReader | None = None
         self.screen = Screen()
         self._wake_r, self._wake_w = os.pipe()
+        atexit.register(self.cleanup)
 
     def __enter__(self) -> TTY:
         fd = sys.stdin.fileno()
         self._fd = fd
         self._saved = termios.tcgetattr(fd)
-        self._enter_raw()
+        tty.setraw(fd)
+        attrs = termios.tcgetattr(fd)
+        attrs[1] |= termios.OPOST
+        termios.tcsetattr(fd, termios.TCSADRAIN, attrs)
         self._active = True
         sys.stdout.write(
             "\033[?1049h\033[?25l\033[?7l\033[?2004h\033[?1004h\033[?1000h\033[?1006h"
@@ -58,9 +61,6 @@ class TTY:
         self._prev_sigwinch = signal.getsignal(signal.SIGWINCH)
         signal.signal(signal.SIGWINCH, self._on_sigwinch)
         self._keys = KeyReader(fd, self._wake_r)
-        if not self._atexit:
-            atexit.register(self.cleanup)
-            self._atexit = True
         return self
 
     def __exit__(self, *_: object) -> None:
@@ -118,14 +118,6 @@ class TTY:
             self._resized = False
             return True
         return False
-
-    def _enter_raw(self) -> None:
-        """Switch to raw mode, re-enable output processing for \\n → \\r\\n."""
-        assert self._fd is not None
-        tty.setraw(self._fd)
-        attrs = termios.tcgetattr(self._fd)
-        attrs[1] |= termios.OPOST
-        termios.tcsetattr(self._fd, termios.TCSADRAIN, attrs)
 
     def _restore(self) -> None:
         """Restore saved terminal attributes."""
