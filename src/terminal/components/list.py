@@ -25,13 +25,14 @@ class ListState(Generic[T]):
     def current(self) -> T | None:
         return self.items[self.cursor] if self.items else None
 
+    def _clamp(self, index: int) -> int:
+        return max(0, min(index, self.total - 1)) if self.total else 0
+
     def move(self, delta: int) -> None:
-        self.cursor = (
-            max(0, min(self.cursor + delta, self.total - 1)) if self.total else 0
-        )
+        self.cursor = self._clamp(self.cursor + delta)
 
     def move_to(self, index: int) -> None:
-        self.cursor = max(0, min(index, self.total - 1)) if self.total else 0
+        self.cursor = self._clamp(index)
 
     def set_items(self, items: builtins.list[T] | tuple[T, ...]) -> None:
         prev = self.current.key if self.current else None
@@ -80,21 +81,18 @@ class List(Component, Generic[T]):
 
     def render(self, width: int, height: int | None = None) -> builtins.list[str]:
         state = self._state
-        total = state.total
-        if total > 0:
-            state.cursor = max(0, min(state.cursor, total - 1))
-        else:
-            state.cursor = 0
+        state.cursor = state._clamp(state.cursor)
         state.scroll.scroll_to_visible(state.cursor)
 
         h = height if self._height == "fill" else self._height
         if not isinstance(h, int) or h <= 0:
             return []
 
+        total = state.total
         state.scroll.height = h
         state.scroll.total = total
-        offset = max(0, min(state.scroll.offset, state.scroll.max_offset))
-        state.scroll.offset = offset
+        state.scroll.offset = max(0, min(state.scroll.offset, state.scroll.max_offset))
+        offset = state.scroll.offset
 
         lines: builtins.list[str] = []
         for i in range(offset, total):

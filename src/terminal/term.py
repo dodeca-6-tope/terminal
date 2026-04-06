@@ -16,6 +16,9 @@ from typing import Any, Protocol
 from terminal.keys import KeyReader, Paste
 from terminal.screen import Screen
 
+_ENTER = "\033[?1049h\033[?25l\033[?7l\033[?2004h\033[?1004h\033[?1000h\033[?1006h"
+_EXIT = "\033[?1006l\033[?1000l\033[?1004l\033[?2004l\033[?7h\033[?25h\033[?1049l"
+
 
 class Terminal(Protocol):
     """Protocol for terminal backends (real TTY or test fake)."""
@@ -53,15 +56,8 @@ class TTY:
         fd = sys.stdin.fileno()
         self._fd = fd
         self._saved = termios.tcgetattr(fd)
-        tty.setraw(fd)
-        attrs = termios.tcgetattr(fd)
-        attrs[1] |= termios.OPOST
-        termios.tcsetattr(fd, termios.TCSADRAIN, attrs)
+        self._enter_raw()
         self._active = True
-        sys.stdout.write(
-            "\033[?1049h\033[?25l\033[?7l\033[?2004h\033[?1004h\033[?1000h\033[?1006h"
-        )
-        sys.stdout.flush()
         self._prev_sigwinch = signal.getsignal(signal.SIGWINCH)
         signal.signal(signal.SIGWINCH, self._on_sigwinch)
         self._keys = KeyReader(fd, self._wake_r)
@@ -76,9 +72,7 @@ class TTY:
             return
         self._active = False
         self.screen.invalidate()
-        sys.stdout.write(
-            "\033[?1006l\033[?1000l\033[?1004l\033[?2004l\033[?7h\033[?25h\033[?1049l"
-        )
+        sys.stdout.write(_EXIT)
         sys.stdout.flush()
         self._restore()
         if self._prev_sigwinch is not None:
@@ -123,24 +117,24 @@ class TTY:
 
     def suspend(self) -> None:
         """Leave alt screen and restore terminal for a child process."""
-        sys.stdout.write(
-            "\033[?1006l\033[?1000l\033[?1004l\033[?2004l\033[?7h\033[?25h\033[?1049l"
-        )
+        sys.stdout.write(_EXIT)
         sys.stdout.flush()
         self._restore()
 
     def resume(self) -> None:
         """Re-enter alt screen and raw mode after a child process."""
+        self._enter_raw()
+        self.screen.invalidate()
+
+    def _enter_raw(self) -> None:
+        """Switch to raw mode with output processing, enter alt screen."""
         assert self._fd is not None
         tty.setraw(self._fd)
         attrs = termios.tcgetattr(self._fd)
         attrs[1] |= termios.OPOST
         termios.tcsetattr(self._fd, termios.TCSADRAIN, attrs)
-        sys.stdout.write(
-            "\033[?1049h\033[?25l\033[?7l\033[?2004h\033[?1004h\033[?1000h\033[?1006h"
-        )
+        sys.stdout.write(_ENTER)
         sys.stdout.flush()
-        self.screen.invalidate()
 
     def _consume_resize(self) -> bool:
         if self._resized:

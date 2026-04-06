@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from terminal.components.base import Component
-from terminal.measure import display_width
+from terminal.screen import pad
 
 
 class TableRow:
@@ -78,7 +78,7 @@ def _render_row(row: TableRow, col_widths: list[int], sep: str) -> str:
         cell = row.cells[ci] if ci < len(row.cells) else _empty
         rendered = cell.render(w)
         content = rendered[0] if rendered else ""
-        parts.append(content + " " * max(0, w - display_width(content)))
+        parts.append(pad(content, w))
     return sep.join(parts)
 
 

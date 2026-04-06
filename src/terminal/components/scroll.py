@@ -64,16 +64,12 @@ class Scroll(Component):
         if not isinstance(h, int) or h <= 0:
             return []
 
-        # Feed resolved dimensions back to state
         self._state.height = h
         self._state.total = len(self._children)
-
-        # Clamp offset
-        offset = max(0, min(self._state.offset, self._state.max_offset))
-        self._state.offset = offset
+        self._state.offset = max(0, min(self._state.offset, self._state.max_offset))
 
         lines: list[str] = []
-        for child in self._children[offset:]:
+        for child in self._children[self._state.offset :]:
             rendered = child.render(width)
             remaining = h - len(lines)
             if len(rendered) >= remaining:

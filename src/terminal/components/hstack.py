@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from terminal.components.base import Component
 from terminal.measure import display_width
+from terminal.screen import pad
 
 
 def _wrap_chunks(strs: list[str], width: int, gap: int) -> list[str]:
@@ -81,8 +82,7 @@ class HStack(Component):
             cells: list[str] = []
             for i, col in enumerate(columns):
                 cell = col[row] if row < len(col) else ""
-                pad = col_widths[i] - display_width(cell)
-                cells.append(cell + " " * max(0, pad))
+                cells.append(pad(cell, col_widths[i]))
             lines.append(self._justify_row(cells, remaining))
         return lines
 
