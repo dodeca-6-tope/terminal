@@ -23,11 +23,15 @@ class Terminal(Protocol):
     def __enter__(self) -> Terminal: ...
     def __exit__(self, *_: object) -> None: ...
     @property
+    def active(self) -> bool: ...
+    @property
     def size(self) -> os.terminal_size: ...
     def readkey(self, timeout: float = 1 / 60) -> str | Paste | None: ...
     def readkey_nowait(self) -> str | Paste | None: ...
     def render(self, lines: list[str]) -> None: ...
     def cleanup(self) -> None: ...
+    def suspend(self) -> None: ...
+    def resume(self) -> None: ...
     def wake(self) -> None: ...
 
 
@@ -112,6 +116,31 @@ class TTY:
         """Wake the event loop from any thread."""
         with contextlib.suppress(OSError):
             os.write(self._wake_w, b"\x00")
+
+    @property
+    def active(self) -> bool:
+        return self._active
+
+    def suspend(self) -> None:
+        """Leave alt screen and restore terminal for a child process."""
+        sys.stdout.write(
+            "\033[?1006l\033[?1000l\033[?1004l\033[?2004l\033[?7h\033[?25h\033[?1049l"
+        )
+        sys.stdout.flush()
+        self._restore()
+
+    def resume(self) -> None:
+        """Re-enter alt screen and raw mode after a child process."""
+        assert self._fd is not None
+        tty.setraw(self._fd)
+        attrs = termios.tcgetattr(self._fd)
+        attrs[1] |= termios.OPOST
+        termios.tcsetattr(self._fd, termios.TCSADRAIN, attrs)
+        sys.stdout.write(
+            "\033[?1049h\033[?25l\033[?7l\033[?2004h\033[?1004h\033[?1000h\033[?1006h"
+        )
+        sys.stdout.flush()
+        self.screen.invalidate()
 
     def _consume_resize(self) -> bool:
         if self._resized:

@@ -1,21 +1,35 @@
-"""Toast — timed message buffer."""
+"""Toast — timed message queue."""
 
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
+
+
+@dataclass
+class Message:
+    text: str
+    level: str = "info"
 
 
 class Toast:
-    """A message with a deadline. Check `visible` to decide whether to show it."""
+    """Queue of timed messages. Expired messages are pruned automatically."""
 
-    def __init__(self) -> None:
-        self.message = ""
-        self._until = 0.0
+    def __init__(self, ttl: float = 3) -> None:
+        self._ttl = ttl
+        self._items: list[tuple[Message, float]] = []
 
-    def show(self, message: str, duration: float = 2) -> None:
-        self.message = message
-        self._until = time.monotonic() + duration
+    def show(
+        self, text: str, level: str = "info", duration: float | None = None
+    ) -> None:
+        deadline = time.monotonic() + (duration if duration is not None else self._ttl)
+        self._items.insert(0, (Message(text, level), deadline))
+
+    def active(self) -> list[Message]:
+        now = time.monotonic()
+        self._items = [(m, dl) for m, dl in self._items if now < dl]
+        return [m for m, _ in self._items]
 
     @property
     def visible(self) -> bool:
-        return time.monotonic() < self._until
+        return bool(self.active())

@@ -181,3 +181,29 @@ def test_focus(term: tuple[Terminal, int]) -> None:
 
 def test_focus_lost(term: tuple[Terminal, int]) -> None:
     assert send(term, b"\x1b[O") is None
+
+
+# ── active / suspend / resume ──────────────────────────────────────
+
+
+def test_active_inside_context() -> None:
+    master, slave = pty.openpty()
+    old_stdin = sys.stdin
+    with open(slave, closefd=False) as f:
+        sys.stdin = f
+        t = Terminal()
+        assert not t.active
+        with t:
+            assert t.active
+        assert not t.active
+    sys.stdin = old_stdin
+    os.close(master)
+    os.close(slave)
+
+
+def test_suspend_resume(term: tuple[Terminal, int]) -> None:
+    t, _ = term
+    assert t.active
+    t.suspend()
+    t.resume()
+    assert t.active
