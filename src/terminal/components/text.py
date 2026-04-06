@@ -100,8 +100,8 @@ class Text(Component):
             return 0
         return self._visible + self._pad_left + self._pad_right
 
-    def flex_grow(self) -> bool:
-        return self._fill
+    def flex_grow_width(self) -> int:
+        return 1 if self._fill else 0
 
     def render(self, width: int, height: int | None = None) -> list[str]:
         inner = width - self._pad_left - self._pad_right

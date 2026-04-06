@@ -45,7 +45,7 @@ class HStack(Component):
         self._wrap = wrap
 
     def _active(self) -> list[Component]:
-        return [c for c in self.children if c.flex_basis() > 0 or c.flex_grow()]
+        return [c for c in self.children if c.flex_basis() > 0 or c.flex_grow_width()]
 
     def render(self, width: int, height: int | None = None) -> list[str]:
         if self._wrap:
@@ -64,19 +64,29 @@ class HStack(Component):
             return [""]
 
         col_widths = [c.flex_basis() for c in active]
-        growers = [i for i, c in enumerate(active) if c.flex_grow()]
+        weights = [
+            (i, c.flex_grow_width())
+            for i, c in enumerate(active)
+            if c.flex_grow_width()
+        ]
         gap_total = self._spacing * max(0, len(active) - 1)
         remaining = max(0, width - sum(col_widths) - gap_total)
 
-        if growers:
-            per = remaining // len(growers)
-            extra = remaining % len(growers)
-            for k, i in enumerate(growers):
-                col_widths[i] += per + (1 if k < extra else 0)
+        if weights:
+            total_weight = sum(w for _, w in weights)
+            cum_weight = 0
+            cum_space = 0
+            for i, w in weights:
+                cum_weight += w
+                target = remaining * cum_weight // total_weight
+                col_widths[i] += target - cum_space
+                cum_space = target
             remaining = 0
 
         columns = [
-            c.render(col_widths[i], height) if c.flex_grow_height() else c.render(col_widths[i])
+            c.render(col_widths[i], height)
+            if c.flex_grow_height()
+            else c.render(col_widths[i])
             for i, c in enumerate(active)
         ]
         max_rows = max((len(col) for col in columns), default=0)
@@ -120,13 +130,16 @@ class HStack(Component):
         gap_total = self._spacing * max(0, len(active) - 1)
         return sum(c.flex_basis() for c in active) + gap_total
 
-    def flex_grow(self) -> bool:
-        return self._justify != "start" or any(c.flex_grow() for c in self.children)
+    def flex_grow_width(self) -> int:
+        child_max = max((c.flex_grow_width() for c in self.children), default=0)
+        if self._justify != "start":
+            return max(1, child_max)
+        return child_max
 
-    def flex_grow_height(self) -> bool:
-        return any(
-            c.flex_grow_height() for c in self.children
-            if not isinstance(c, Spacer)
+    def flex_grow_height(self) -> int:
+        return max(
+            (c.flex_grow_height() for c in self.children if not isinstance(c, Spacer)),
+            default=0,
         )
 
 

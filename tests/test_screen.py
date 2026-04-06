@@ -24,8 +24,10 @@ def _last_frame(chunks: list[str]) -> list[str]:
     if "\n" in raw:
         return raw.split("\n")
     import re
+
     parts = re.split(r"\033\[\d+;1H", raw)
     return [p for p in parts if p]
+
 
 # ── clip ────────────────────────────────────────────────────────────
 

@@ -11,11 +11,11 @@ class Spacer(Component):
             return [""] * height
         return [" " * width]
 
-    def flex_grow(self) -> bool:
-        return True
+    def flex_grow_width(self) -> int:
+        return 1
 
-    def flex_grow_height(self) -> bool:
-        return True
+    def flex_grow_height(self) -> int:
+        return 1
 
 
 def spacer() -> Spacer:

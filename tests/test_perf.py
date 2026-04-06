@@ -4,7 +4,6 @@ Budgets are ~5x measured times: tight enough to catch regressions,
 loose enough to not flake on CI.
 """
 
-import builtins
 import time
 from dataclasses import dataclass
 

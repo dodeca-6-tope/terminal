@@ -20,18 +20,19 @@ class Table(Component):
         if rows:
             self._col_widths, self._grow_cols = self._measure_columns()
         else:
-            self._col_widths, self._grow_cols = [], set[int]()
+            self._col_widths, self._grow_cols = [], {}
 
-    def _measure_columns(self) -> tuple[list[int], set[int]]:
+    def _measure_columns(self) -> tuple[list[int], dict[int, int]]:
         """Return (col_widths, grow_cols) from natural sizes."""
         num_cols = max(len(r.cells) for r in self._rows)
         cells = [(ci, cell) for row in self._rows for ci, cell in enumerate(row.cells)]
         col_widths = [0] * num_cols
-        grow_cols: set[int] = set()
+        grow_cols: dict[int, int] = {}
         for ci, cell in cells:
             col_widths[ci] = max(col_widths[ci], cell.flex_basis())
-            if cell.flex_grow():
-                grow_cols.add(ci)
+            g = cell.flex_grow_width()
+            if g:
+                grow_cols[ci] = max(grow_cols.get(ci, 0), g)
         return col_widths, grow_cols
 
     def _resolve_widths(self, width: int) -> list[int]:
@@ -44,10 +45,15 @@ class Table(Component):
                 + gap_total
             )
             remaining = max(0, width - fixed)
-            per = remaining // len(grow_cols)
-            extra = remaining % len(grow_cols)
-            for j, ci in enumerate(sorted(grow_cols)):
-                col_widths[ci] = per + (1 if j < extra else 0)
+            sorted_growers = sorted(grow_cols.items())
+            total_weight = sum(w for _, w in sorted_growers)
+            cum_weight = 0
+            cum_space = 0
+            for ci, w in sorted_growers:
+                cum_weight += w
+                target = remaining * cum_weight // total_weight
+                col_widths[ci] = target - cum_space
+                cum_space = target
         return col_widths
 
     def render(self, width: int, height: int | None = None) -> list[str]:
@@ -65,8 +71,8 @@ class Table(Component):
         gap_total = self._spacing * max(0, len(self._col_widths) - 1)
         return sum(self._col_widths) + gap_total
 
-    def flex_grow(self) -> bool:
-        return len(self._grow_cols) > 0
+    def flex_grow_width(self) -> int:
+        return max(self._grow_cols.values()) if self._grow_cols else 0
 
 
 _empty = Component()

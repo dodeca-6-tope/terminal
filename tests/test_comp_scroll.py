@@ -155,19 +155,19 @@ def test_flex_basis_empty():
 def test_flex_grow_when_child_grows():
     s = _state()
     sc = scroll(text("x", max_width="fill"), state=s, height=5)
-    assert sc.flex_grow() is True
+    assert sc.flex_grow_width()
 
 
 def test_flex_grow_height_fill():
     s = _state()
     sc = scroll(text("a"), state=s)
-    assert sc.flex_grow_height() is True
+    assert sc.flex_grow_height()
 
 
 def test_no_flex_grow_height_fixed():
     s = _state()
     sc = scroll(text("a"), state=s, height=10)
-    assert sc.flex_grow_height() is False
+    assert not sc.flex_grow_height()
 
 
 # ── height="fill" ───────────────────────────────────────────────────
@@ -706,6 +706,7 @@ def test_scrollbar_default_single_row():
 
 def test_scrollbar_default_monotonic():
     """Thumb position should only move forward as offset increases."""
+
     def thumb_top(offset: int) -> int:
         col = scrollbar_default(20, 200, offset)
         for i, c in enumerate(col):
@@ -744,7 +745,7 @@ def test_scroll_to_bottom_enables_follow():
 def test_scroll_always_grows_horizontally():
     s = ScrollState()
     sc = scroll(text("short"), state=s, height=5)
-    assert sc.flex_grow() is True
+    assert sc.flex_grow_width()
 
 
 # ── Scroll + Scrollbar end-to-end ─────────────────────────────────

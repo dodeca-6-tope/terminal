@@ -137,19 +137,19 @@ def test_wrap_ansi_text():
 
 
 def test_flex_grow_from_child():
-    assert hstack(text("a"), text("b", max_width="fill")).flex_grow() is True
+    assert hstack(text("a"), text("b", max_width="fill")).flex_grow_width()
 
 
 def test_flex_grow_false_without_growers():
-    assert hstack(text("a"), text("b")).flex_grow() is False
+    assert not hstack(text("a"), text("b")).flex_grow_width()
 
 
 def test_justify_implies_flex_grow():
     """Non-start justify modes need extra space, so they imply flex_grow."""
-    assert hstack(text("a"), justify="center").flex_grow() is True
-    assert hstack(text("a"), justify="end").flex_grow() is True
-    assert hstack(text("a"), justify="between").flex_grow() is True
-    assert hstack(text("a"), justify="start").flex_grow() is False
+    assert hstack(text("a"), justify="center").flex_grow_width()
+    assert hstack(text("a"), justify="end").flex_grow_width()
+    assert hstack(text("a"), justify="between").flex_grow_width()
+    assert not hstack(text("a"), justify="start").flex_grow_width()
 
 
 def test_justify_gets_space_in_hstack():
@@ -173,10 +173,6 @@ def test_invalid_justify_raises():
 
 
 # ── Height propagation ─────────────────────────────────────────────
-
-
-def clean(lines: list[str]) -> list[str]:
-    return [strip_ansi(l) for l in lines]
 
 
 def test_height_passed_to_scroll_child():
@@ -212,14 +208,14 @@ def test_height_not_passed_to_fixed_child():
 def test_flex_grow_height_excludes_spacer():
     """HStack with only spacer children should not claim flex_grow_height."""
     h = hstack(text("a"), spacer(), text("b"))
-    assert h.flex_grow_height() is False
+    assert not h.flex_grow_height()
 
 
 def test_flex_grow_height_true_with_scroll():
     """HStack with a scroll child should claim flex_grow_height."""
     s = ScrollState()
     h = hstack(scroll(text("a"), state=s), text("b"))
-    assert h.flex_grow_height() is True
+    assert h.flex_grow_height()
 
 
 def test_hstack_in_vstack_scroll_gets_remaining_height():

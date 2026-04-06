@@ -72,9 +72,9 @@ def test_multiple_fill_columns():
 
 def test_flex_grow_with_fill_column():
     tbl = table(table_row(text("id"), text("name", max_width="fill")))
-    assert tbl.flex_grow() is True
+    assert tbl.flex_grow_width()
 
 
 def test_flex_grow_false_without_fill():
     tbl = table(table_row(text("a"), text("b")))
-    assert tbl.flex_grow() is False
+    assert not tbl.flex_grow_width()

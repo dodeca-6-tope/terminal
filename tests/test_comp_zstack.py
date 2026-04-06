@@ -69,8 +69,8 @@ def test_flex_basis_is_max():
 
 
 def test_flex_grow_if_any_child_grows():
-    assert zstack(text("hi"), text("fill", max_width="fill")).flex_grow() is True
-    assert zstack(text("hi"), text("no")).flex_grow() is False
+    assert zstack(text("hi"), text("fill", max_width="fill")).flex_grow_width()
+    assert not zstack(text("hi"), text("no")).flex_grow_width()
 
 
 # ── Height pass-through ─────────────────────────────────────────────
@@ -96,8 +96,8 @@ def test_flex_grow_height_propagates():
 
     s = ScrollState()
     z = zstack(scroll(text("a"), state=s))
-    assert z.flex_grow_height() is True
-    assert zstack(text("a")).flex_grow_height() is False
+    assert z.flex_grow_height()
+    assert not zstack(text("a")).flex_grow_height()
 
 
 # ── Overlay styling preservation ────────────────────────────────────

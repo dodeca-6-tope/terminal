@@ -136,8 +136,8 @@ def test_flex_basis_fill_is_zero():
 
 
 def test_flex_grow_fill():
-    assert text("hello", max_width="fill").flex_grow() is True
-    assert text("hello").flex_grow() is False
+    assert text("hello", max_width="fill").flex_grow_width()
+    assert not text("hello").flex_grow_width()
 
 
 # ── Display width ────────────────────────────────────────────────────

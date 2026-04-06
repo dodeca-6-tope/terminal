@@ -144,15 +144,15 @@ class KeyReader:
         if not self._fill(0.004):
             return "esc"
         # Bracketed paste
-        if self._buf[:5] == b"[200~":
+        if self._buf.startswith(b"[200~"):
             del self._buf[:5]
             return self._read_paste()
         # CSI sequence: \x1b[...
-        if self._buf[:1] == b"[":
+        if self._buf.startswith(b"["):
             del self._buf[:1]
             return self._read_csi()
         # Double escape: \x1b\x1b[X — Option+arrow on some terminals
-        if self._buf[:2] == b"\x1b[" and len(self._buf) >= 3:
+        if self._buf.startswith(b"\x1b[") and len(self._buf) >= 3:
             del self._buf[:2]
             return DBL_ESC_KEYS.get(self._consume())
         # Alt/Option + key
@@ -180,11 +180,19 @@ class KeyReader:
         while True:
             idx = self._buf.find(b"\x1b[201~")
             if idx >= 0:
-                text = bytes(self._buf[:idx]).decode("utf-8", errors="replace").replace("\r", "\n")
-                del self._buf[:idx + 6]
+                text = (
+                    bytes(self._buf[:idx])
+                    .decode("utf-8", errors="replace")
+                    .replace("\r", "\n")
+                )
+                del self._buf[: idx + 6]
                 return Paste(text)
             if not self._fill(0.1):
-                text = bytes(self._buf).decode("utf-8", errors="replace").replace("\r", "\n")
+                text = (
+                    bytes(self._buf)
+                    .decode("utf-8", errors="replace")
+                    .replace("\r", "\n")
+                )
                 self._buf.clear()
                 return Paste(text)
 

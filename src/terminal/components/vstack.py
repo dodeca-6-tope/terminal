@@ -13,11 +13,11 @@ class VStack(Component):
     def flex_basis(self) -> int:
         return max((c.flex_basis() for c in self.children), default=0)
 
-    def flex_grow(self) -> bool:
-        return any(c.flex_grow() for c in self.children)
+    def flex_grow_width(self) -> int:
+        return max((c.flex_grow_width() for c in self.children), default=0)
 
-    def flex_grow_height(self) -> bool:
-        return any(c.flex_grow_height() for c in self.children)
+    def flex_grow_height(self) -> int:
+        return max((c.flex_grow_height() for c in self.children), default=0)
 
     def render(self, width: int, height: int | None = None) -> list[str]:
         if height is None:
@@ -28,18 +28,31 @@ class VStack(Component):
         return self._join([c.render(width) for c in self.children])
 
     def _render_constrained(self, width: int, height: int) -> list[str]:
-        growers = [i for i, c in enumerate(self.children) if c.flex_grow_height()]
-        if not growers:
+        weights = [
+            (i, c.flex_grow_height())
+            for i, c in enumerate(self.children)
+            if c.flex_grow_height()
+        ]
+        if not weights:
             return self._render_unconstrained(width)
 
+        grower_set = {i for i, _ in weights}
         fixed = [
-            None if i in set(growers) else c.render(width)
+            None if i in grower_set else c.render(width)
             for i, c in enumerate(self.children)
         ]
         used = self._spacing * max(0, len(self.children) - 1)
         used += sum(len(r) for r in fixed if r is not None)
-        per, extra = divmod(max(0, height - used), len(growers))
-        heights = {g: per + (1 if j < extra else 0) for j, g in enumerate(growers)}
+        remaining = max(0, height - used)
+        total_weight = sum(w for _, w in weights)
+        cum_weight = 0
+        cum_space = 0
+        heights: dict[int, int] = {}
+        for i, w in weights:
+            cum_weight += w
+            target = remaining * cum_weight // total_weight
+            heights[i] = target - cum_space
+            cum_space = target
 
         return self._join(
             [

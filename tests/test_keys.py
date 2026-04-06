@@ -1,6 +1,8 @@
 """Tests for key parsing — pure functions, no TTY needed."""
 
-from terminal.keys import Paste, parse_csi, parse_sgr_mouse
+import os
+
+from terminal.keys import KeyReader, Paste, parse_csi, parse_sgr_mouse
 
 # ── CSI parsing ─────────────────────────────────────────────────────
 
@@ -78,9 +80,6 @@ def test_sgr_malformed_returns_none():
 
 # ── KeyReader — public contract: read() returns correct keys ───────
 
-import os
-from terminal.keys import KeyReader
-
 
 def _pipe_reader(data: bytes) -> KeyReader:
     """Create a KeyReader backed by a pipe pre-loaded with data."""
@@ -129,7 +128,7 @@ def test_reader_reads_mouse_scroll():
 def test_reader_consecutive_scroll_events_dont_merge():
     """Rapid scroll events should each be returned individually."""
     kr = _pipe_reader(b"\x1b[<64;5;10M\x1b[<64;5;10M\x1b[<64;5;10M")
-    events = []
+    events: list[str | Paste] = []
     while (k := kr.read(0)) is not None:
         events.append(k)
     assert events == ["scroll-up", "scroll-up", "scroll-up"]
@@ -164,7 +163,7 @@ def test_reader_many_rapid_scroll_events():
     event = b"\x1b[<64;10;20M"
     count = 50
     kr = _pipe_reader(event * count)
-    results = []
+    results: list[str | Paste] = []
     while (k := kr.read(0)) is not None:
         results.append(k)
     assert results == ["scroll-up"] * count
@@ -202,9 +201,7 @@ def test_reader_bracketed_paste():
 
 def test_reader_scroll_interleaved_with_arrows():
     """Realistic fast input: scroll events mixed with arrow keys."""
-    kr = _pipe_reader(
-        b"\x1b[<64;5;5M\x1b[A\x1b[<65;5;5M\x1b[B"
-    )
+    kr = _pipe_reader(b"\x1b[<64;5;5M\x1b[A\x1b[<65;5;5M\x1b[B")
     assert kr.read(0) == "scroll-up"
     assert kr.read(0) == "up"
     assert kr.read(0) == "scroll-down"
@@ -250,14 +247,14 @@ def test_csi_boundary_modifier_then_mouse():
 def test_csi_boundary_many_mixed_sequences():
     """Stress test: many different CSI types back-to-back."""
     data = (
-        b"\x1b[A"          # up
-        b"\x1b[<64;1;1M"   # scroll-up
-        b"\x1b[5~"         # page-up
-        b"\x1b[1;3D"       # word-left
-        b"\x1b[B"          # down
-        b"\x1b[<65;1;1M"   # scroll-down
-        b"\x1b[3~"         # delete
-        b"\x1b[H"          # home
+        b"\x1b[A"  # up
+        b"\x1b[<64;1;1M"  # scroll-up
+        b"\x1b[5~"  # page-up
+        b"\x1b[1;3D"  # word-left
+        b"\x1b[B"  # down
+        b"\x1b[<65;1;1M"  # scroll-down
+        b"\x1b[3~"  # delete
+        b"\x1b[H"  # home
     )
     kr = _pipe_reader(data)
     assert kr.read(0) == "up"

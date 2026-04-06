@@ -37,10 +37,10 @@ class Box(Component):
         title_w = display_width(self._title) + 2 if self._title else 0
         return max(content_w, title_w) + 2
 
-    def flex_grow(self) -> bool:
-        return self._child.flex_grow()
+    def flex_grow_width(self) -> int:
+        return self._child.flex_grow_width()
 
-    def flex_grow_height(self) -> bool:
+    def flex_grow_height(self) -> int:
         return self._child.flex_grow_height()
 
     def render(self, width: int, height: int | None = None) -> list[str]:
@@ -65,7 +65,7 @@ class Box(Component):
         return lines
 
     def _inner_width(self, width: int) -> int:
-        if self._child.flex_grow():
+        if self._child.flex_grow_width():
             return max(0, width - 2)
         pad = self._padding
         content_w = self._child.flex_basis() + pad * 2

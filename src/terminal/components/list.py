@@ -25,14 +25,14 @@ class ListState(Generic[T]):
     def current(self) -> T | None:
         return self.items[self.cursor] if self.items else None
 
-    def _clamp(self, index: int) -> int:
+    def clamp(self, index: int) -> int:
         return max(0, min(index, self.total - 1)) if self.total else 0
 
     def move(self, delta: int) -> None:
-        self.cursor = self._clamp(self.cursor + delta)
+        self.cursor = self.clamp(self.cursor + delta)
 
     def move_to(self, index: int) -> None:
-        self.cursor = self._clamp(index)
+        self.cursor = self.clamp(index)
 
     def set_items(self, items: builtins.list[T] | tuple[T, ...]) -> None:
         prev = self.current.key if self.current else None
@@ -73,15 +73,15 @@ class List(Component, Generic[T]):
         self._render_fn = render_fn
         self._height = height
 
-    def flex_grow(self) -> bool:
-        return True
+    def flex_grow_width(self) -> int:
+        return 1
 
-    def flex_grow_height(self) -> bool:
-        return self._height == "fill"
+    def flex_grow_height(self) -> int:
+        return 1 if self._height == "fill" else 0
 
     def render(self, width: int, height: int | None = None) -> builtins.list[str]:
         state = self._state
-        state.cursor = state._clamp(state.cursor)
+        state.cursor = state.clamp(state.cursor)
         state.scroll.scroll_to_visible(state.cursor)
 
         h = height if self._height == "fill" else self._height

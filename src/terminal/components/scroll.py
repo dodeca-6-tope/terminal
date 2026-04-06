@@ -60,11 +60,11 @@ class Scroll(Component):
     def flex_basis(self) -> int:
         return max((c.flex_basis() for c in self._children), default=0)
 
-    def flex_grow(self) -> bool:
-        return True
+    def flex_grow_width(self) -> int:
+        return 1
 
-    def flex_grow_height(self) -> bool:
-        return self._height == "fill"
+    def flex_grow_height(self) -> int:
+        return 1 if self._height == "fill" else 0
 
     def render(self, width: int, height: int | None = None) -> list[str]:
         h = height if self._height == "fill" else self._height

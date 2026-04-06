@@ -47,8 +47,8 @@ class Scrollbar(Component):
     def flex_basis(self) -> int:
         return 1
 
-    def flex_grow_height(self) -> bool:
-        return True
+    def flex_grow_height(self) -> int:
+        return 1
 
     def render(self, width: int, height: int | None = None) -> list[str]:
         h = self._state.height

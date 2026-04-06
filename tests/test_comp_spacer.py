@@ -9,7 +9,7 @@ def test_fills_width():
 
 
 def test_flex_grow():
-    assert spacer().flex_grow() is True
+    assert spacer().flex_grow_width()
 
 
 def test_flex_basis_zero():
