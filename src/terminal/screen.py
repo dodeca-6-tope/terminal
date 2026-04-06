@@ -9,12 +9,12 @@ from collections.abc import Callable
 from terminal.measure import char_width, display_width
 
 
-def clip_and_pad(line: str, cols: int) -> str:
-    """Clip to cols visible characters and pad with spaces to exactly cols."""
+def clip_and_pad(line: str, width: int) -> str:
+    """Clip to width visible characters and pad with spaces to exactly width."""
     if "\033" not in line and line.isascii():
         n = len(line)
-        return line[:cols] if n >= cols else line + " " * (cols - n)
-    return _clip_pad_scan(line, cols)
+        return line[:width] if n >= width else line + " " * (width - n)
+    return _clip_pad_scan(line, width)
 
 
 def clip(line: str, max_width: int) -> str:
@@ -37,7 +37,7 @@ def _ansi_end(line: str, pos: int) -> int:
     return end + 1
 
 
-def _clip_pad_scan(line: str, cols: int) -> str:
+def _clip_pad_scan(line: str, width: int) -> str:
     visible = 0
     pos = 0
     while pos < len(line):
@@ -46,11 +46,11 @@ def _clip_pad_scan(line: str, cols: int) -> str:
             pos = end
             continue
         visible += char_width(line[pos])
-        if visible > cols:
+        if visible > width:
             return line[:pos] + "\033[0m"
         pos += 1
-    if visible < cols:
-        return line + " " * (cols - visible)
+    if visible < width:
+        return line + " " * (width - visible)
     return line
 
 
@@ -69,9 +69,9 @@ def _clip_scan(line: str, max_width: int) -> str:
     return line
 
 
-def pad(line: str, cols: int) -> str:
-    """Pad a line with spaces to exactly cols visible characters."""
-    gap = cols - display_width(line)
+def pad(line: str, width: int) -> str:
+    """Pad a line with spaces to exactly width visible characters."""
+    gap = width - display_width(line)
     if gap > 0:
         return line + " " * gap
     return line

@@ -2,20 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from terminal.components.base import Component
 from terminal.measure import display_width, slice_at_width, strip_ansi
 
 
-def truncate(s: str, max_len: int, ellipsis: bool = False) -> str:
-    """Truncate a string to max_len visible characters."""
+def truncate(s: str, max_width: int, ellipsis: bool = False) -> str:
+    """Truncate a string to max_width visible characters."""
     stripped = strip_ansi(s)
-    if display_width(stripped) <= max_len:
+    if display_width(stripped) <= max_width:
         return s
     if ellipsis:
-        return slice_at_width(stripped, max_len - 1) + "…"
-    return slice_at_width(stripped, max_len)
+        return slice_at_width(stripped, max_width - 1) + "…"
+    return slice_at_width(stripped, max_width)
 
 
 def _wrap_line(line: str, width: int) -> list[str]:
@@ -123,5 +121,22 @@ class Text(Component):
         return [f"{pad}{c}{pad_r}" for c in chunks]
 
 
-def text(content: str = "", **kwargs: Any) -> Text:
-    return Text(content, **kwargs)
+def text(
+    content: str = "",
+    *,
+    max_width: int | str | None = None,
+    wrap: bool = False,
+    padding: int = 0,
+    padding_left: int | None = None,
+    padding_right: int | None = None,
+    ellipsis: bool = False,
+) -> Text:
+    return Text(
+        content,
+        max_width=max_width,
+        wrap=wrap,
+        padding=padding,
+        padding_left=padding_left,
+        padding_right=padding_right,
+        ellipsis=ellipsis,
+    )

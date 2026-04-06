@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from terminal.components.base import Component
+from terminal.components.spacer import Spacer
 
 
 class VStack(Component):
@@ -14,7 +15,10 @@ class VStack(Component):
         return max((c.flex_basis() for c in self._children), default=0)
 
     def flex_grow_width(self) -> int:
-        return max((c.flex_grow_width() for c in self._children), default=0)
+        return max(
+            (c.flex_grow_width() for c in self._children if not isinstance(c, Spacer)),
+            default=0,
+        )
 
     def flex_grow_height(self) -> int:
         return max((c.flex_grow_height() for c in self._children), default=0)

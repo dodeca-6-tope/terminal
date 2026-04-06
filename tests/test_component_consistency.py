@@ -4,7 +4,7 @@ Verifies that components sharing the same concept (flex delegation, height
 pass-through, private children, empty render) follow identical rules.
 """
 
-from terminal import cond, foreach, hstack, scroll, spacer, text, vstack, zstack
+from terminal import Component, cond, foreach, hstack, scroll, text, vstack, zstack
 from terminal.components.scroll import ScrollState
 from terminal.measure import strip_ansi
 
@@ -26,17 +26,17 @@ def test_cond_delegates_flex_grow_width_false():
 
 
 def test_foreach_delegates_flex_grow_width():
-    fe = foreach(["a"], lambda item, i: text(item, max_width="fill"))
+    fe = foreach(["a"], lambda item, i: text(str(item), max_width="fill"))
     assert fe.flex_grow_width() == 1
 
 
 def test_foreach_flex_grow_width_no_growers():
-    fe = foreach(["a"], lambda item, i: text(item))
+    fe = foreach(["a"], lambda item, i: text(str(item)))
     assert fe.flex_grow_width() == 0
 
 
 def test_foreach_flex_grow_width_empty():
-    fe = foreach([], lambda item, i: text(item))
+    fe = foreach([], lambda item, i: text(str(item)))
     assert fe.flex_grow_width() == 0
 
 
@@ -50,12 +50,12 @@ def test_foreach_delegates_flex_grow_height():
 
 
 def test_foreach_flex_grow_height_no_growers():
-    fe = foreach(["a"], lambda item, i: text(item))
+    fe = foreach(["a"], lambda item, i: text(str(item)))
     assert fe.flex_grow_height() == 0
 
 
 def test_foreach_flex_grow_height_empty():
-    fe = foreach([], lambda item, i: text(item))
+    fe = foreach([], lambda item, i: text(str(item)))
     assert fe.flex_grow_height() == 0
 
 
@@ -64,9 +64,9 @@ def test_foreach_flex_grow_height_empty():
 # to children with flex_grow_height, not to fixed children.
 
 
-def _make_scroll(n: int = 20) -> tuple[ScrollState, list]:
+def _make_scroll(n: int = 20) -> tuple[ScrollState, list[Component]]:
     s = ScrollState()
-    items = [text(str(i)) for i in range(n)]
+    items: list[Component] = [text(str(i)) for i in range(n)]
     return s, items
 
 
@@ -106,7 +106,7 @@ def test_foreach_passes_height_to_children():
 
 
 def test_cond_propagates_flex_grow_weight():
-    s1, s2 = ScrollState(), ScrollState()
+    s1 = ScrollState()
     # scroll has flex_grow_height=1, but we can test that it propagates exactly
     inner = scroll(text("a"), state=s1)
     c = cond(True, inner)
@@ -131,21 +131,21 @@ def test_empty_flex_basis():
     assert hstack().flex_basis() == 0
     assert vstack().flex_basis() == 0
     assert zstack().flex_basis() == 0
-    assert foreach([], lambda item, i: text(item)).flex_basis() == 0
+    assert foreach([], lambda item, i: text(str(item))).flex_basis() == 0
 
 
 def test_empty_flex_grow_width():
     assert hstack().flex_grow_width() == 0
     assert vstack().flex_grow_width() == 0
     assert zstack().flex_grow_width() == 0
-    assert foreach([], lambda item, i: text(item)).flex_grow_width() == 0
+    assert foreach([], lambda item, i: text(str(item))).flex_grow_width() == 0
 
 
 def test_empty_flex_grow_height():
     assert hstack().flex_grow_height() == 0
     assert vstack().flex_grow_height() == 0
     assert zstack().flex_grow_height() == 0
-    assert foreach([], lambda item, i: text(item)).flex_grow_height() == 0
+    assert foreach([], lambda item, i: text(str(item))).flex_grow_height() == 0
 
 
 # ── Private children attribute ────────────────────────────────────────
@@ -157,7 +157,7 @@ def test_children_are_private():
         hstack(text("a")),
         vstack(text("a")),
         zstack(text("a")),
-        foreach(["a"], lambda item, i: text(item)),
+        foreach(["a"], lambda item, i: text(str(item))),
     ]
     for c in containers:
         assert hasattr(c, "_children"), f"{type(c).__name__} missing _children"
