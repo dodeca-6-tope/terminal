@@ -24,8 +24,8 @@ def test_truthy_values():
 
 
 def test_flex_basis():
-    assert cond(True, text("hello")).flex_basis() == 5
-    assert cond(False, text("hello")).flex_basis() == 0
+    assert cond(True, text("hello")).flex_basis == 5
+    assert cond(False, text("hello")).flex_basis == 0
 
 
 def test_flex_grow_height_true():
@@ -34,7 +34,7 @@ def test_flex_grow_height_true():
     s = ScrollState()
     from terminal import scroll
 
-    assert cond(True, scroll(text("a"), state=s)).flex_grow_height()
+    assert cond(True, scroll(text("a"), state=s)).flex_grow_height
 
 
 def test_flex_grow_height_false_condition():
@@ -43,11 +43,11 @@ def test_flex_grow_height_false_condition():
     s = ScrollState()
     from terminal import scroll
 
-    assert not cond(False, scroll(text("a"), state=s)).flex_grow_height()
+    assert not cond(False, scroll(text("a"), state=s)).flex_grow_height
 
 
 def test_flex_grow_height_non_grower():
-    assert not cond(True, text("a")).flex_grow_height()
+    assert not cond(True, text("a")).flex_grow_height
 
 
 def test_height_passed_to_child():

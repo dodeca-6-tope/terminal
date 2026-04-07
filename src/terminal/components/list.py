@@ -6,7 +6,7 @@ import builtins
 from collections.abc import Callable
 from typing import Generic, TypeVar
 
-from terminal.components.base import Component
+from terminal.components.base import Renderable, frame
 from terminal.components.keyed import Keyed
 from terminal.components.scroll import ScrollState
 
@@ -59,32 +59,18 @@ class ListState(Generic[T]):
         return len(self.items)
 
 
-class List(Component, Generic[T]):
-    """Scrollable list that only builds visible children at render time."""
-
-    def __init__(
-        self,
-        state: ListState[T],
-        render_fn: Callable[[T, bool], Component],
-        *,
-        height: int | str = "fill",
-    ) -> None:
-        self._state = state
-        self._render_fn = render_fn
-        self._height = height
-
-    def flex_grow_width(self) -> int:
-        return 1
-
-    def flex_grow_height(self) -> int:
-        return 1 if self._height == "fill" else 0
-
-    def render(self, width: int, height: int | None = None) -> builtins.list[str]:
-        state = self._state
+def list(
+    state: ListState[T],
+    render_fn: Callable[[T, bool], Renderable],
+    width: str | None = None,
+    height: str | None = None,
+    bg: int | None = None,
+    overflow: str = "visible",
+) -> Renderable:
+    def render(w: int, h: int | None = None) -> builtins.list[str]:
         state.cursor = state.clamp(state.cursor)
         state.scroll.scroll_to_visible(state.cursor)
 
-        h = height if self._height == "fill" else self._height
         if not isinstance(h, int) or h <= 0:
             return []
 
@@ -96,8 +82,8 @@ class List(Component, Generic[T]):
 
         lines: builtins.list[str] = []
         for i in range(offset, total):
-            child = self._render_fn(state.items[i], i == state.cursor)
-            rendered = child.render(width)
+            child = render_fn(state.items[i], i == state.cursor)
+            rendered = child.render(w)
             remaining = h - len(lines)
             if len(rendered) >= remaining:
                 lines.extend(rendered[:remaining])
@@ -107,5 +93,4 @@ class List(Component, Generic[T]):
             lines.extend([""] * (h - len(lines)))
         return lines
 
-
-list = List
+    return frame(Renderable(render, 0, 1, 1), width, height, bg, overflow)

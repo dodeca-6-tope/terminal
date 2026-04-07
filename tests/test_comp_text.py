@@ -40,23 +40,25 @@ def test_padding_left_right():
     assert clean(text("hi", padding_left=1, padding_right=3).render(80)) == [" hi   "]
 
 
-def test_max_width_truncates():
-    assert clean(text("hello world", max_width=8).render(80)) == ["hello wo"]
+def test_width_truncates_with_overflow_hidden():
+    assert clean(text("hello world", width="8", overflow="hidden").render(80)) == [
+        "hello wo"
+    ]
 
 
-def test_max_width_no_truncate_when_fits():
-    assert clean(text("hi", max_width=10).render(80)) == ["hi"]
+def test_width_no_truncate_when_fits():
+    assert clean(text("hi", width="10", overflow="hidden").render(80)) == ["hi        "]
 
 
-def test_max_width_fill_truncates_to_budget():
-    t = text("a" * 100, max_width="fill")
+def test_width_100pct_truncates_to_budget():
+    t = text("a" * 100, width="100%", overflow="hidden")
     result = clean(t.render(20))
     assert len(result[0]) == 20
     assert result[0] == "a" * 20
 
 
-def test_max_width_fill_no_truncate_when_fits():
-    assert clean(text("short", max_width="fill").render(80)) == ["short"]
+def test_width_100pct_no_truncate_when_fits():
+    assert clean(text("short", width="100%").render(80)) == ["short"]
 
 
 def test_padding_exceeds_width():
@@ -79,7 +81,7 @@ def test_multiline_ansi():
 
 
 def test_multiline_flex_basis_uses_widest():
-    assert text("short\na longer line").flex_basis() == 13
+    assert text("short\na longer line").flex_basis == 13
 
 
 def test_multiline_crlf():
@@ -127,17 +129,17 @@ def test_wrap_with_newlines():
 
 
 def test_flex_basis():
-    assert text("hello").flex_basis() == 5
-    assert text("hi", padding=1).flex_basis() == 4
+    assert text("hello").flex_basis == 5
+    assert text("hi", padding=1).flex_basis == 4
 
 
-def test_flex_basis_fill_is_zero():
-    assert text("hello", max_width="fill").flex_basis() == 0
+def test_flex_basis_with_100pct_width():
+    assert text("hello", width="100%").flex_basis == 5
 
 
-def test_flex_grow_fill():
-    assert text("hello", max_width="fill").flex_grow_width()
-    assert not text("hello").flex_grow_width()
+def test_flex_grow_with_100pct_width():
+    assert text("hello", width="100%").flex_grow_width
+    assert not text("hello").flex_grow_width
 
 
 # ── Display width ────────────────────────────────────────────────────

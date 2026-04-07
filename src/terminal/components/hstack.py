@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from terminal.components.base import Component
-from terminal.components.spacer import Spacer
+from terminal.components.base import Renderable, frame
 from terminal.measure import display_width, distribute
 from terminal.screen import pad
 
@@ -27,63 +26,97 @@ def _wrap_chunks(strs: list[str], width: int, gap: int) -> list[str]:
     return lines
 
 
-class HStack(Component):
-    _JUSTIFY = {"start", "end", "center", "between"}
+_JUSTIFY_CONTENT = {"start", "end", "center", "between"}
+_ALIGN_ITEMS = {"start", "end", "center"}
 
-    def __init__(
-        self,
-        *children: Component,
-        spacing: int = 0,
-        justify: str = "start",
-        wrap: bool = False,
-    ) -> None:
-        if justify not in self._JUSTIFY:
-            raise ValueError(f"unknown justify {justify!r}")
-        self._children = list(children)
-        self._spacing = spacing
-        self._justify = justify
-        self._wrap = wrap
 
-    def _active(self) -> list[Component]:
-        return [c for c in self._children if c.flex_basis() > 0 or c.flex_grow_width()]
+def hstack(
+    *children: Renderable,
+    spacing: int = 0,
+    justify_content: str = "start",
+    align_items: str = "start",
+    wrap: bool = False,
+    width: str | None = None,
+    height: str | None = None,
+    bg: int | None = None,
+    overflow: str = "visible",
+) -> Renderable:
+    if justify_content not in _JUSTIFY_CONTENT:
+        raise ValueError(f"unknown justify_content {justify_content!r}")
+    if align_items not in _ALIGN_ITEMS:
+        raise ValueError(f"unknown align_items {align_items!r}")
+    children_list = list(children)
 
-    def render(self, width: int, height: int | None = None) -> list[str]:
-        if self._wrap:
-            return self._render_wrap(width)
-        return self._render_fixed(width, height)
+    def active() -> list[Renderable]:
+        return [c for c in children_list if c.flex_basis > 0 or c.flex_grow_width]
 
-    def _render_wrap(self, width: int) -> list[str]:
-        if not self._children:
+    act = active()
+    gap_total = spacing * max(0, len(act) - 1)
+    basis = sum(c.flex_basis for c in act) + gap_total
+
+    child_max = max((c.flex_grow_width for c in children_list), default=0)
+    grow_w = max(1, child_max) if justify_content != "start" else child_max
+
+    grow_h = max(
+        (c.flex_grow_height for c in children_list),
+        default=0,
+    )
+
+    def justify_between(cells: list[str], remaining: int) -> str:
+        gaps = len(cells) - 1
+        per_gap = remaining // gaps
+        extra = remaining % gaps
+        parts: list[str] = []
+        for i, cell in enumerate(cells):
+            parts.append(cell)
+            if i < gaps:
+                parts.append(" " * (spacing + per_gap + (1 if i < extra else 0)))
+        return "".join(parts)
+
+    def justify_row(cells: list[str], remaining: int) -> str:
+        gap = " " * spacing
+        joined = gap.join(cells)
+
+        if remaining <= 0 or justify_content == "start":
+            return joined
+        if justify_content == "end":
+            return " " * remaining + joined
+        if justify_content == "center":
+            return " " * (remaining // 2) + joined
+        if justify_content == "between" and len(cells) > 1:
+            return justify_between(cells, remaining)
+        return joined
+
+    def render_wrap(w: int) -> list[str]:
+        if not children_list:
             return [""]
-        strs = [" ".join(c.render(width)) for c in self._children]
-        return _wrap_chunks(strs, width, self._spacing)
+        strs = [" ".join(c.render(w)) for c in children_list]
+        return _wrap_chunks(strs, w, spacing)
 
-    def _render_fixed(self, width: int, height: int | None = None) -> list[str]:
-        active = self._active()
-        if not active:
-            return [""]
+    def render_fixed(w: int, h: int | None = None) -> list[str]:
+        act = active()
+        if not act:
+            return [""] * h if h else [""]
 
-        col_widths = [c.flex_basis() for c in active]
+        col_widths = [c.flex_basis for c in act]
         weights = [
-            (i, c.flex_grow_width())
-            for i, c in enumerate(active)
-            if c.flex_grow_width()
+            (i, c.flex_grow_width) for i, c in enumerate(act) if c.flex_grow_width
         ]
-        gap_total = self._spacing * max(0, len(active) - 1)
-        remaining = max(0, width - sum(col_widths) - gap_total)
+        gt = spacing * max(0, len(act) - 1)
+        remaining = max(0, w - sum(col_widths) - gt)
 
         if weights:
             for (i, _), extra in zip(
-                weights, distribute(remaining, [w for _, w in weights])
+                weights, distribute(remaining, [wt for _, wt in weights])
             ):
                 col_widths[i] += extra
             remaining = 0
 
         columns = [
-            c.render(col_widths[i], height)
-            if c.flex_grow_height()
+            c.render(col_widths[i], h)
+            if c.flex_grow_height
             else c.render(col_widths[i])
-            for i, c in enumerate(active)
+            for i, c in enumerate(act)
         ]
         max_rows = max((len(col) for col in columns), default=0)
 
@@ -92,51 +125,24 @@ class HStack(Component):
             cells: list[str] = []
             for i, col in enumerate(columns):
                 cell = col[row] if row < len(col) else ""
+                if align_items == "end":
+                    cell = (
+                        col[row - max_rows + len(col)]
+                        if row >= max_rows - len(col)
+                        else ""
+                    )
+                elif align_items == "center":
+                    offset = (max_rows - len(col)) // 2
+                    cell = (
+                        col[row - offset] if offset <= row < offset + len(col) else ""
+                    )
                 cells.append(pad(cell, col_widths[i]))
-            lines.append(self._justify_row(cells, remaining))
+            lines.append(justify_row(cells, remaining))
         return lines
 
-    def _justify_row(self, cells: list[str], remaining: int) -> str:
-        gap = " " * self._spacing
-        joined = gap.join(cells)
+    def render(w: int, h: int | None = None) -> list[str]:
+        if wrap:
+            return render_wrap(w)
+        return render_fixed(w, h)
 
-        if remaining <= 0 or self._justify == "start":
-            return joined
-        if self._justify == "end":
-            return " " * remaining + joined
-        if self._justify == "center":
-            return " " * (remaining // 2) + joined
-        if self._justify == "between" and len(cells) > 1:
-            return self._justify_between(cells, remaining)
-        return joined
-
-    def _justify_between(self, cells: list[str], remaining: int) -> str:
-        gaps = len(cells) - 1
-        per_gap = remaining // gaps
-        extra = remaining % gaps
-        parts: list[str] = []
-        for i, cell in enumerate(cells):
-            parts.append(cell)
-            if i < gaps:
-                parts.append(" " * (self._spacing + per_gap + (1 if i < extra else 0)))
-        return "".join(parts)
-
-    def flex_basis(self) -> int:
-        active = self._active()
-        gap_total = self._spacing * max(0, len(active) - 1)
-        return sum(c.flex_basis() for c in active) + gap_total
-
-    def flex_grow_width(self) -> int:
-        child_max = max((c.flex_grow_width() for c in self._children), default=0)
-        if self._justify != "start":
-            return max(1, child_max)
-        return child_max
-
-    def flex_grow_height(self) -> int:
-        return max(
-            (c.flex_grow_height() for c in self._children if not isinstance(c, Spacer)),
-            default=0,
-        )
-
-
-hstack = HStack
+    return frame(Renderable(render, basis, grow_w, grow_h), width, height, bg, overflow)

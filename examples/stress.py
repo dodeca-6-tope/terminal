@@ -53,24 +53,14 @@ class S:
     render_time: float = 0.0
 
 
-class _Torus(t.Component):
-    def __init__(self, a: float, b: float) -> None:
-        self._a = a
-        self._b = b
-
-    def flex_grow_width(self) -> int:
-        return 1
-
-    def flex_grow_height(self) -> int:
-        return 1
-
-    def render(self, width: int, height: int | None = None) -> list[str]:
+def _torus(a: float, b: float) -> t.Renderable:
+    def render(width: int, height: int | None = None) -> list[str]:
         height = height or 20
         grid = [[" "] * width for _ in range(height)]
         zbuf = [[0.0] * width for _ in range(height)]
         k1 = width * K2 * 0.4 / (R1 + R2)
-        cos_a, sin_a = math.cos(self._a), math.sin(self._a)
-        cos_b, sin_b = math.cos(self._b), math.sin(self._b)
+        cos_a, sin_a = math.cos(a), math.sin(a)
+        cos_b, sin_b = math.cos(b), math.sin(b)
 
         theta = 0.0
         while theta < 6.28:
@@ -104,13 +94,15 @@ class _Torus(t.Component):
             theta += 0.07
         return ["".join(row) for row in grid]
 
+    return t.Renderable(render, flex_grow_width=1, flex_grow_height=1)
 
-def view(s: S) -> t.Component:
+
+def view(s: S) -> t.Renderable:
     fps = 1 / s.render_time if s.render_time > 0 else 0
     fps_color = 2 if fps >= 200 else (3 if fps >= 60 else 1)
 
     scene = t.zstack(
-        _Torus(s.a, s.b),
+        _torus(s.a, s.b),
         t.box(
             t.table(
                 t.table_row(
@@ -122,7 +114,8 @@ def view(s: S) -> t.Component:
             ),
             padding=1,
         ),
-        align="bottom-right",
+        justify_content="end",
+        align_items="end",
     )
 
     if s.show_help:
@@ -149,25 +142,25 @@ def view(s: S) -> t.Component:
                 title="help",
                 padding=1,
             ),
-            align="center",
+            justify_content="center",
+            align_items="center",
         )
 
     return t.vstack(
         t.hstack(
-            t.text(t.bold(t.color(39, "◆ TORUS"))),
-            t.cond(s.paused, t.text(t.reverse(t.color(3, " PAUSED ")))),
-            t.spacer(),
             t.hstack(
-                t.text(t.reverse(t.color(4, " ? "))),
-                t.text(t.dim("help")),
+                t.text(t.bold(t.color(39, "◆ TORUS"))),
+                t.cond(s.paused, t.text(t.reverse(t.color(3, " PAUSED ")))),
                 spacing=1,
             ),
             t.hstack(
+                t.text(t.reverse(t.color(4, " ? "))),
+                t.text(t.dim("help")),
                 t.text(t.reverse(t.color(4, " q "))),
                 t.text(t.dim("quit")),
                 spacing=1,
             ),
-            spacing=1,
+            justify_content="between",
         ),
         scene,
     )

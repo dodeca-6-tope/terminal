@@ -22,7 +22,7 @@ def test_empty():
 
 
 def test_flex_basis():
-    assert vstack(text("hello"), text("hi")).flex_basis() == 5
+    assert vstack(text("hello"), text("hi")).flex_basis == 5
 
 
 # ── Height-constrained rendering ─────────────────────────────────────
@@ -102,8 +102,8 @@ def test_constrained_grower_gets_zero_when_fixed_fills():
 
 
 def test_flex_grow_propagates_from_children():
-    assert vstack(text("a"), text("b", max_width="fill")).flex_grow_width()
+    assert vstack(text("a"), text("b", width="100%")).flex_grow_width
 
 
 def test_flex_grow_false_without_growers():
-    assert not vstack(text("a"), text("b")).flex_grow_width()
+    assert not vstack(text("a"), text("b")).flex_grow_width

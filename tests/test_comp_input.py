@@ -41,5 +41,5 @@ def test_paste_display():
 
 
 def test_flex_basis():
-    assert input(InputBuffer("hello")).flex_basis() > 0
-    assert input(InputBuffer()).flex_basis() == 0
+    assert input(InputBuffer("hello")).flex_basis > 0
+    assert input(InputBuffer()).flex_basis == 0

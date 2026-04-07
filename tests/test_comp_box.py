@@ -67,20 +67,20 @@ def test_content_padded_to_width():
 
 
 def test_flex_basis():
-    assert box(text("hello")).flex_basis() == 7  # 5 + 2 borders
-    assert box(text("hello"), padding=1).flex_basis() == 9  # 5 + 2 borders + 2 padding
+    assert box(text("hello")).flex_basis == 7  # 5 + 2 borders
+    assert box(text("hello"), padding=1).flex_basis == 9  # 5 + 2 borders + 2 padding
 
 
 def test_flex_basis_accounts_for_title():
     """Box should be wide enough to fit the title without truncation."""
     b = box(text("x"), title="Long Title Here")
     # title needs: len("Long Title Here") + 2 (spaces) + 2 (borders) = 19
-    assert b.flex_basis() >= len("Long Title Here") + 4
+    assert b.flex_basis >= len("Long Title Here") + 4
 
 
 def test_flex_grow_passthrough():
-    assert box(text("hi", max_width="fill")).flex_grow_width()
-    assert not box(text("hi")).flex_grow_width()
+    assert box(text("hi", width="100%")).flex_grow_width
+    assert not box(text("hi")).flex_grow_width
 
 
 def test_empty_child():
@@ -116,8 +116,8 @@ def test_height_none_unconstrained():
 
 def test_flex_grow_height_delegates():
     s = ScrollState()
-    assert box(scroll(text("a"), state=s)).flex_grow_height()
-    assert not box(text("a")).flex_grow_height()
+    assert box(scroll(text("a"), state=s)).flex_grow_height
+    assert not box(text("a")).flex_grow_height
 
 
 # ── Title position ──────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 """Tests for HStack component."""
 
-from terminal import Text, cond, hstack, scroll, spacer, text, vstack
+from terminal import cond, hstack, scroll, text, vstack
 from terminal.components.scroll import ScrollState
 from terminal.measure import strip_ansi
 
@@ -20,8 +20,10 @@ def test_spacing():
     assert clean(hstack(text("a"), text("b"), spacing=3).render(20)) == ["a   b"]
 
 
-def test_spacer_fills():
-    result = clean(hstack(text("L"), spacer(), text("R")).render(20))[0]
+def test_between_fills():
+    result = clean(hstack(text("L"), text("R"), justify_content="between").render(20))[
+        0
+    ]
     assert result.startswith("L")
     assert result.endswith("R")
     assert len(result) == 20
@@ -48,26 +50,28 @@ def test_multiline_children():
 
 
 def test_justify_between():
-    result = clean(hstack(text("L"), text("R"), justify="between").render(20))[0]
+    result = clean(hstack(text("L"), text("R"), justify_content="between").render(20))[
+        0
+    ]
     assert result.startswith("L")
     assert result.rstrip().endswith("R")
 
 
 def test_justify_end():
-    result = clean(hstack(text("hi"), justify="end").render(20))[0]
+    result = clean(hstack(text("hi"), justify_content="end").render(20))[0]
     assert result.endswith("hi")
     assert result.startswith(" ")
 
 
 def test_justify_center():
-    result = clean(hstack(text("hi"), justify="center").render(20))[0]
+    result = clean(hstack(text("hi"), justify_content="center").render(20))[0]
     assert "hi" in result
     assert result.index("h") > 0
 
 
 def test_justify_between_single_child():
-    """justify=between with one child should behave like start."""
-    result = clean(hstack(text("only"), justify="between").render(20))[0]
+    """justify_content=between with one child should behave like start."""
+    result = clean(hstack(text("only"), justify_content="between").render(20))[0]
     assert result.startswith("only")
 
 
@@ -121,7 +125,7 @@ def test_wrap_with_spacing():
 
 def test_wrap_with_text_objects():
     assert clean(
-        hstack(Text("hello"), Text("world"), wrap=True, spacing=1).render(40)
+        hstack(text("hello"), text("world"), wrap=True, spacing=1).render(40)
     ) == ["hello world"]
 
 
@@ -137,24 +141,24 @@ def test_wrap_ansi_text():
 
 
 def test_flex_grow_from_child():
-    assert hstack(text("a"), text("b", max_width="fill")).flex_grow_width()
+    assert hstack(text("a"), text("b", width="100%")).flex_grow_width
 
 
 def test_flex_grow_false_without_growers():
-    assert not hstack(text("a"), text("b")).flex_grow_width()
+    assert not hstack(text("a"), text("b")).flex_grow_width
 
 
 def test_justify_implies_flex_grow():
     """Non-start justify modes need extra space, so they imply flex_grow."""
-    assert hstack(text("a"), justify="center").flex_grow_width()
-    assert hstack(text("a"), justify="end").flex_grow_width()
-    assert hstack(text("a"), justify="between").flex_grow_width()
-    assert not hstack(text("a"), justify="start").flex_grow_width()
+    assert hstack(text("a"), justify_content="center").flex_grow_width
+    assert hstack(text("a"), justify_content="end").flex_grow_width
+    assert hstack(text("a"), justify_content="between").flex_grow_width
+    assert not hstack(text("a"), justify_content="start").flex_grow_width
 
 
 def test_justify_gets_space_in_hstack():
-    """A justify=between hstack inside an outer hstack should spread items."""
-    inner = hstack(text("L"), text("R"), justify="between")
+    """A justify_content=between hstack inside an outer hstack should spread items."""
+    inner = hstack(text("L"), text("R"), justify_content="between")
     outer = hstack(inner)
     result = clean(outer.render(20))[0]
     assert result.startswith("L")
@@ -165,11 +169,11 @@ def test_justify_gets_space_in_hstack():
 # ── Validation ──────────────────────────────────────────────────────
 
 
-def test_invalid_justify_raises():
+def test_invalid_justify_content_raises():
     import pytest
 
-    with pytest.raises(ValueError, match="unknown justify"):
-        hstack(text("x"), justify="spread")
+    with pytest.raises(ValueError, match="unknown justify_content"):
+        hstack(text("x"), justify_content="spread")
 
 
 # ── Height propagation ─────────────────────────────────────────────
@@ -205,17 +209,11 @@ def test_height_not_passed_to_fixed_child():
     assert s.height == 8
 
 
-def test_flex_grow_height_excludes_spacer():
-    """HStack with only spacer children should not claim flex_grow_height."""
-    h = hstack(text("a"), spacer(), text("b"))
-    assert not h.flex_grow_height()
-
-
 def test_flex_grow_height_true_with_scroll():
     """HStack with a scroll child should claim flex_grow_height."""
     s = ScrollState()
     h = hstack(scroll(text("a"), state=s), text("b"))
-    assert h.flex_grow_height()
+    assert h.flex_grow_height
 
 
 def test_hstack_in_vstack_scroll_gets_remaining_height():

@@ -29,7 +29,7 @@ def test_empty():
 
 
 def test_fill_column():
-    tbl = table(table_row(text("id"), text("long title here", max_width="fill")))
+    tbl = table(table_row(text("id"), text("long title here", width="100%")))
     lines = clean(tbl.render(30))
     assert len(lines[0]) <= 30
 
@@ -58,8 +58,8 @@ def test_multiple_fill_columns():
     tbl = table(
         table_row(
             text("id"),
-            text("name", max_width="fill"),
-            text("desc", max_width="fill"),
+            text("name", width="100%"),
+            text("desc", width="100%"),
         )
     )
     lines = clean(tbl.render(42))
@@ -71,10 +71,10 @@ def test_multiple_fill_columns():
 
 
 def test_flex_grow_with_fill_column():
-    tbl = table(table_row(text("id"), text("name", max_width="fill")))
-    assert tbl.flex_grow_width()
+    tbl = table(table_row(text("id"), text("name", width="100%")))
+    assert tbl.flex_grow_width
 
 
 def test_flex_grow_false_without_fill():
     tbl = table(table_row(text("a"), text("b")))
-    assert not tbl.flex_grow_width()
+    assert not tbl.flex_grow_width

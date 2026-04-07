@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from terminal.components.base import Component
+from terminal.components.base import Renderable, frame
 
 
 class ScrollState:
@@ -46,42 +46,33 @@ class ScrollState:
         return max(0, self.total - self.height)
 
 
-class Scroll(Component):
-    def __init__(
-        self,
-        *children: Component,
-        state: ScrollState,
-        height: int | str = "fill",
-    ) -> None:
-        self._children = list(children)
-        self._state = state
-        self._height = height
+def scroll(
+    *children: Renderable,
+    state: ScrollState,
+    width: str | None = None,
+    height: str | None = None,
+    bg: int | None = None,
+    overflow: str = "visible",
+) -> Renderable:
+    children_list = list(children)
 
-    def flex_basis(self) -> int:
-        return max((c.flex_basis() for c in self._children), default=0)
+    basis = max((c.flex_basis for c in children_list), default=0)
 
-    def flex_grow_width(self) -> int:
-        return 1
-
-    def flex_grow_height(self) -> int:
-        return 1 if self._height == "fill" else 0
-
-    def render(self, width: int, height: int | None = None) -> list[str]:
-        h = height if self._height == "fill" else self._height
+    def render(w: int, h: int | None = None) -> list[str]:
         if not isinstance(h, int) or h <= 0:
             return []
 
-        self._state.height = h
-        self._state.total = len(self._children)
-        if self._state.follow:
-            self._state.offset = self._state.max_offset
-        self._state.offset = max(0, min(self._state.offset, self._state.max_offset))
-        if self._state.offset >= self._state.max_offset:
-            self._state.follow = True
+        state.height = h
+        state.total = len(children_list)
+        if state.follow:
+            state.offset = state.max_offset
+        state.offset = max(0, min(state.offset, state.max_offset))
+        if state.offset >= state.max_offset:
+            state.follow = True
 
         lines: list[str] = []
-        for child in self._children[self._state.offset :]:
-            rendered = child.render(width)
+        for child in children_list[state.offset :]:
+            rendered = child.render(w)
             remaining = h - len(lines)
             if len(rendered) >= remaining:
                 lines.extend(rendered[:remaining])
@@ -92,5 +83,4 @@ class Scroll(Component):
 
         return lines
 
-
-scroll = Scroll
+    return frame(Renderable(render, basis, 1, 1), width, height, bg, overflow)

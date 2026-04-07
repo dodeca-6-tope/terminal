@@ -1,49 +1,35 @@
-from terminal.components.base import Component
-from terminal.components.box import Box, box
-from terminal.components.cond import Cond, cond
-from terminal.components.foreach import ForEach, foreach
-from terminal.components.hstack import HStack, hstack
+from terminal.components.base import Renderable
+from terminal.components.box import box
+from terminal.components.cond import cond
+from terminal.components.foreach import foreach
+from terminal.components.hstack import hstack
 from terminal.components.input import (
-    Input,
     InputBuffer,
     PasteRange,
     display_text,
     input,
 )
 from terminal.components.keyed import Keyed
-from terminal.components.list import List, ListState, list
-from terminal.components.scroll import Scroll, ScrollState, scroll
-from terminal.components.scrollbar import Scrollbar, scrollbar, scrollbar_default
-from terminal.components.spacer import Spacer, spacer
-from terminal.components.table import Table, TableRow, table, table_row
+from terminal.components.list import ListState, list
+from terminal.components.scroll import ScrollState, scroll
+from terminal.components.scrollbar import scrollbar, scrollbar_default
+from terminal.components.table import TableRow, table, table_row
 from terminal.components.text import Text, text
 from terminal.components.toast import Message, ToastState
-from terminal.components.vstack import VStack, vstack
-from terminal.components.zstack import ZStack, zstack
+from terminal.components.vstack import vstack
+from terminal.components.zstack import zstack
 
 __all__ = [
-    "Box",
-    "Component",
-    "Cond",
-    "ForEach",
-    "HStack",
-    "Input",
     "InputBuffer",
     "Keyed",
-    "List",
     "ListState",
     "Message",
     "PasteRange",
-    "Scroll",
-    "Scrollbar",
+    "Renderable",
     "ScrollState",
-    "Spacer",
-    "Table",
     "TableRow",
     "Text",
     "ToastState",
-    "VStack",
-    "ZStack",
     "box",
     "cond",
     "display_text",
@@ -54,7 +40,6 @@ __all__ = [
     "scroll",
     "scrollbar",
     "scrollbar_default",
-    "spacer",
     "table",
     "table_row",
     "text",

@@ -6,7 +6,6 @@ from terminal import (
     cond,
     foreach,
     hstack,
-    spacer,
     table,
     table_row,
     text,
@@ -44,14 +43,16 @@ def test_foreach_in_hstack():
     assert "side" in lines[0]
 
 
-def test_cond_in_hstack_spacer():
-    result = clean(hstack(cond(False, text("L")), spacer(), text("R")).render(20))[0]
+def test_cond_in_hstack_between():
+    result = clean(
+        hstack(cond(False, text("L")), text("R"), justify_content="between").render(20)
+    )[0]
     assert result.rstrip().endswith("R")
 
 
 def test_deeply_nested():
     tree = vstack(
-        hstack(text("title"), spacer(), text("v1.0")),
+        hstack(text("title"), text("v1.0"), justify_content="between"),
         table(table_row(text(">"), text("item"), text(color(2, "ok")))),
         hstack(text("[q] quit"), text("[h] help"), wrap=True, spacing=2),
     )

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from terminal.components.base import Component
+from terminal.components.base import Renderable, frame
 from terminal.measure import display_width, slice_at_width, strip_ansi
 
 
@@ -40,25 +40,19 @@ def _wrap_line(line: str, width: int) -> list[str]:
     return lines or [""]
 
 
-class Text(Component):
+class Text:
     """ANSI-aware string that doubles as a display component."""
 
     def __init__(
         self,
         value: object = "",
         *,
-        max_width: int | str | None = None,
         wrap: bool = False,
         padding: int = 0,
         padding_left: int | None = None,
         padding_right: int | None = None,
-        ellipsis: bool = False,
     ) -> None:
         raw = str(value)
-        self._fill = max_width == "fill"
-        self._ellipsis = ellipsis
-        if isinstance(max_width, int):
-            raw = truncate(raw, max_width, ellipsis=ellipsis)
         self._raw = raw
         self._wrap = wrap
         self._lines = raw.splitlines() or [""]
@@ -94,31 +88,51 @@ class Text(Component):
         return Text(spaces + self._raw)
 
     def flex_basis(self) -> int:
-        if self._fill:
-            return 0
         return self._visible + self._pad_left + self._pad_right
 
     def flex_grow_width(self) -> int:
-        return 1 if self._fill else 0
+        return 0
+
+    def flex_grow_height(self) -> int:
+        return 0
 
     def render(self, width: int, height: int | None = None) -> list[str]:
         inner = width - self._pad_left - self._pad_right
         pad = " " * self._pad_left
         pad_r = " " * self._pad_right
-        should_truncate = self._fill and self._visible > inner
 
         chunks: list[str] = []
         for line in self._lines:
-            raw = (
-                truncate(line, inner, ellipsis=self._ellipsis)
-                if should_truncate
-                else line
-            )
             if self._wrap and inner > 0:
-                chunks.extend(_wrap_line(raw, inner))
+                chunks.extend(_wrap_line(line, inner))
             else:
-                chunks.append(raw)
+                chunks.append(line)
         return [f"{pad}{c}{pad_r}" for c in chunks]
 
 
-text = Text
+def text(
+    value: object = "",
+    *,
+    wrap: bool = False,
+    padding: int = 0,
+    padding_left: int | None = None,
+    padding_right: int | None = None,
+    width: str | None = None,
+    height: str | None = None,
+    bg: int | None = None,
+    overflow: str = "visible",
+) -> Renderable:
+    t = Text(
+        value,
+        wrap=wrap,
+        padding=padding,
+        padding_left=padding_left,
+        padding_right=padding_right,
+    )
+    return frame(
+        Renderable(t.render, t.flex_basis(), t.flex_grow_width(), t.flex_grow_height()),
+        width,
+        height,
+        bg,
+        overflow,
+    )

@@ -8,13 +8,11 @@ import time
 from dataclasses import dataclass
 
 from terminal import (
-    Component,
     ListState,
     ScrollState,
     box,
     hstack,
     scroll,
-    spacer,
     table,
     table_row,
     text,
@@ -155,7 +153,7 @@ def test_wide_table():
     rows = [
         table_row(
             text(f"id-{i}"),
-            text(f"name-{i}", max_width="fill"),
+            text(f"name-{i}", width="100%"),
             text("active" if i % 2 else "inactive"),
             text(str(i * 100)),
             text("details..."),
@@ -170,7 +168,7 @@ def test_wide_table():
 def test_nested_hstack():
     """Deeply nested HStacks: 5^5 = 3125 leaf nodes, 10 renders."""
 
-    def build(depth: int) -> Component:
+    def build(depth: int):
         if depth == 0:
             return text("leaf")
         return hstack(*[build(depth - 1) for _ in range(5)], spacing=1)
@@ -187,7 +185,7 @@ def test_zstack_large_overlay():
     """ZStack: full-screen ASCII base + centered overlay, 100 renders."""
     base = vstack(*[text("." * WIDTH) for _ in range(HEIGHT)])
     overlay = box(text("Alert! " * 10), padding=1)
-    tree = zstack(base, overlay, align="center")
+    tree = zstack(base, overlay, justify_content="center", align_items="center")
     elapsed = _timed(lambda: tree.render(WIDTH, HEIGHT), iterations=100)
     assert elapsed < 0.06, f"zstack overlay x100 took {elapsed:.3f}s"
 
@@ -196,7 +194,7 @@ def test_zstack_wide_chars():
     """ZStack: wide-char base + overlay, 100 renders."""
     base = vstack(*[text("你好世界" * 25) for _ in range(HEIGHT)])
     overlay = text("ALERT")
-    tree = zstack(base, overlay, align="center")
+    tree = zstack(base, overlay, justify_content="center", align_items="center")
     elapsed = _timed(lambda: tree.render(WIDTH, HEIGHT), iterations=100)
     assert elapsed < 0.5, f"zstack wide x100 took {elapsed:.3f}s"
 
@@ -209,8 +207,8 @@ def test_scroll_large_content():
     state = ScrollState()
     state.offset = 5000
     children = [text(f"line {i}") for i in range(10_000)]
-    tree = scroll(*children, state=state, height=HEIGHT)
-    elapsed = _timed(lambda: tree.render(WIDTH), iterations=100)
+    tree = scroll(*children, state=state)
+    elapsed = _timed(lambda: tree.render(WIDTH, HEIGHT), iterations=100)
     assert elapsed < 0.01, f"scroll 10k x100 took {elapsed:.3f}s"
 
 
@@ -224,15 +222,15 @@ def test_realistic_frame():
     def build():
         header = hstack(
             text("\033[1m✦ APP\033[0m"),
-            spacer(),
             text("\033[2m100/1000\033[0m"),
+            justify_content="between",
             spacing=1,
         )
         body = tlist(
             items,
             lambda item, sel: hstack(
                 text("▸ " if sel else "  "),
-                text(f"Item {item.key}", max_width="fill", ellipsis=True),
+                text(f"Item {item.key}", width="100%", overflow="ellipsis"),
                 text("✓" if item.key % 3 == 0 else " "),
             ),
         )

@@ -19,4 +19,4 @@ def test_empty_list():
 
 
 def test_flex_basis():
-    assert foreach(["hi", "hello"], lambda item, i: text(item)).flex_basis() == 5
+    assert foreach(["hi", "hello"], lambda item, i: text(item)).flex_basis == 5

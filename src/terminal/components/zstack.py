@@ -2,88 +2,28 @@
 
 from __future__ import annotations
 
-from terminal.components.base import Component
+from terminal.components.base import Renderable, frame
 from terminal.measure import ANSI_RE, char_width, display_width
 from terminal.screen import clip
 
+_JUSTIFY = {"start", "end", "center"}
+_ALIGN = {"start", "end", "center"}
 
-class ZStack(Component):
-    _ALIGNS = {
-        "top-left",
-        "top",
-        "top-right",
-        "left",
-        "center",
-        "right",
-        "bottom-left",
-        "bottom",
-        "bottom-right",
-    }
-
-    def __init__(
-        self,
-        *children: Component,
-        align: str = "top-left",
-    ) -> None:
-        if align not in self._ALIGNS:
-            raise ValueError(f"unknown align {align!r}")
-        self._children = list(children)
-        self._align = align
-
-    def flex_basis(self) -> int:
-        return max((c.flex_basis() for c in self._children), default=0)
-
-    def flex_grow_width(self) -> int:
-        return max((c.flex_grow_width() for c in self._children), default=0)
-
-    def flex_grow_height(self) -> int:
-        return max((c.flex_grow_height() for c in self._children), default=0)
-
-    def render(self, width: int, height: int | None = None) -> list[str]:
-        if not self._children:
-            return [""]
-        # Growers receive height as a proposal; others render at natural size
-        layers = [
-            c.render(width, height) if c.flex_grow_height() else c.render(width)
-            for c in self._children
-        ]
-        # Canvas = first child. Overlays align and clip within it.
-        base = layers[0]
-        height = len(base)
-        base_w = max((display_width(l) for l in base), default=0)
-        canvas_w = width if self.flex_grow_width() else base_w
-        canvas = [" " * canvas_w for _ in range(height)]
-        # First child always top-left
-        for i, line in enumerate(base):
-            canvas[i] = _stamp(canvas[i], 0, line, canvas_w)
-        # Overlays align within the first child's bounds
-        for layer in layers[1:]:
-            layer_w = max((display_width(l) for l in layer), default=0)
-            row_off, col_off = _offsets(
-                self._align, (base_w, height), (layer_w, len(layer))
-            )
-            start = max(0, -row_off)
-            end = min(len(layer), height - row_off)
-            for i in range(start, end):
-                canvas[row_off + i] = _stamp(
-                    canvas[row_off + i], col_off, layer[i], canvas_w
-                )
-        return canvas
-
-
-_V_OFFSETS = {"top": 0, "center": 0.5, "bottom": 1}
-_H_OFFSETS = {"left": 0, "center": 0.5, "right": 1}
+_V = {"start": 0, "center": 0.5, "end": 1}
+_H = {"start": 0, "center": 0.5, "end": 1}
 
 
 def _offsets(
-    align: str, canvas: tuple[int, int], layer: tuple[int, int]
+    justify_content: str,
+    align_items: str,
+    canvas: tuple[int, int],
+    layer: tuple[int, int],
 ) -> tuple[int, int]:
     """Compute (row_offset, col_offset) for alignment."""
-    parts = align.split("-") if "-" in align else [align]
-    vf = next((_V_OFFSETS[p] for p in parts if p in _V_OFFSETS), 0.5)
-    hf = next((_H_OFFSETS[p] for p in parts if p in _H_OFFSETS), 0.5)
     w, h = canvas
     lw, lh = layer
+    vf = _V.get(align_items, 0)
+    hf = _H.get(justify_content, 0)
     return max(0, int((h - lh) * vf)), max(0, int((w - lw) * hf))
 
 
@@ -139,4 +79,50 @@ def _stamp(base: str, col: int, line: str, width: int) -> str:
     return left + "\033[0m" + line + "\033[0m" + restore + right
 
 
-zstack = ZStack
+def zstack(
+    *children: Renderable,
+    justify_content: str = "start",
+    align_items: str = "start",
+    width: str | None = None,
+    height: str | None = None,
+    bg: int | None = None,
+    overflow: str = "visible",
+) -> Renderable:
+    if justify_content not in _JUSTIFY:
+        raise ValueError(f"unknown justify_content {justify_content!r}")
+    if align_items not in _ALIGN:
+        raise ValueError(f"unknown align_items {align_items!r}")
+    children_list = list(children)
+
+    basis = max((c.flex_basis for c in children_list), default=0)
+    grow_w = max((c.flex_grow_width for c in children_list), default=0)
+    grow_h = max((c.flex_grow_height for c in children_list), default=0)
+
+    def render(w: int, h: int | None = None) -> list[str]:
+        if not children_list:
+            return [""] * h if h else [""]
+        layers = [c.render(w, h) for c in children_list]
+        base = layers[0]
+        canvas_w = w
+        canvas_h = h if h is not None else len(base)
+        canvas = [" " * canvas_w for _ in range(canvas_h)]
+        for ci, layer in enumerate(layers):
+            child = children_list[ci]
+            rendered_w = max((display_width(l) for l in layer), default=0)
+            layer_w = child.width if child.width is not None else rendered_w
+            layer_h = child.height if child.height is not None else len(layer)
+            row_off, col_off = _offsets(
+                justify_content,
+                align_items,
+                (canvas_w, canvas_h),
+                (layer_w, layer_h),
+            )
+            start = max(0, -row_off)
+            end = min(len(layer), canvas_h - row_off)
+            for i in range(start, end):
+                canvas[row_off + i] = _stamp(
+                    canvas[row_off + i], col_off, layer[i], canvas_w
+                )
+        return canvas
+
+    return frame(Renderable(render, basis, grow_w, grow_h), width, height, bg, overflow)

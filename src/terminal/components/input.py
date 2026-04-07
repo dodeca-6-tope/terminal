@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from terminal.components.base import Component
+from terminal.components.base import Renderable, frame
 from terminal.term import Paste
 
 
@@ -241,35 +241,6 @@ CURSOR_ON = "\033[7m"
 CURSOR_OFF = "\033[27m"
 
 
-class Input(Component):
-    def __init__(
-        self, ti: InputBuffer, *, placeholder: str = "", active: bool = True
-    ) -> None:
-        self._input = ti
-        self._placeholder = placeholder
-        self._active = active
-
-    def flex_basis(self) -> int:
-        if self._input.value:
-            w = len(display_text(self._input))
-            return w + 1 if self._active else w
-        return len(self._placeholder)
-
-    def render(self, width: int, height: int | None = None) -> list[str]:
-        if not self._input.value and not self._active:
-            if self._placeholder:
-                return [f"\033[2m{self._placeholder}\033[0m"]
-            return [""]
-        text = display_text(self._input)
-        if self._active:
-            cur = display_cursor(self._input)
-            return _wrap_with_cursor(text, cur, width)
-        return _wrap(text, width)
-
-
-input = Input
-
-
 def _wrap(text: str, width: int) -> list[str]:
     if not text:
         return [""]
@@ -288,3 +259,33 @@ def _wrap_with_cursor(text: str, cur: int, width: int) -> list[str]:
             )
         lines.append(chunk)
     return lines
+
+
+def input(
+    ti: InputBuffer,
+    *,
+    placeholder: str = "",
+    active: bool = True,
+    width: str | None = None,
+    height: str | None = None,
+    bg: int | None = None,
+    overflow: str = "visible",
+) -> Renderable:
+    if ti.value:
+        w = len(display_text(ti))
+        basis = w + 1 if active else w
+    else:
+        basis = len(placeholder)
+
+    def render(w: int, h: int | None = None) -> list[str]:
+        if not ti.value and not active:
+            if placeholder:
+                return [f"\033[2m{placeholder}\033[0m"]
+            return [""]
+        txt = display_text(ti)
+        if active:
+            cur = display_cursor(ti)
+            return _wrap_with_cursor(txt, cur, w)
+        return _wrap(txt, w)
+
+    return frame(Renderable(render, basis, 0, 0), width, height, bg, overflow)
