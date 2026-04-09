@@ -41,7 +41,9 @@ def test_hstack_3_to_1_weight():
 
 def test_hstack_uneven_remainder():
     #          A=6         B=7          C=7
-    assert vis(hstack(weighted("A", 1), weighted("B", 1), weighted("C", 1)).render(20)) == [
+    assert vis(
+        hstack(weighted("A", 1), weighted("B", 1), weighted("C", 1)).render(20)
+    ) == [
         "A·····B······C······",
     ]
 
@@ -85,7 +87,9 @@ def test_vstack_mixed_fixed_and_weighted():
 
 
 def test_vstack_uneven_height_remainder():
-    lines = vis(vstack(weighted("A", 1), weighted("B", 1), weighted("C", 1)).render(5, 20))
+    lines = vis(
+        vstack(weighted("A", 1), weighted("B", 1), weighted("C", 1)).render(5, 20)
+    )
     assert len(lines) == 20
     assert lines[0].startswith("A")
     assert lines[6].startswith("B")
@@ -96,13 +100,19 @@ def test_vstack_uneven_height_remainder():
 
 
 def test_table_weighted_columns():
-    assert vis(table(table_row(weighted("A", 2), weighted("B", 1)), spacing=0).render(30)) == [
+    assert vis(
+        table(table_row(weighted("A", 2), weighted("B", 1)), spacing=0).render(30)
+    ) == [
         "A···················B·········",
     ]
 
 
 def test_table_weighted_with_fixed():
-    assert vis(table(table_row(text("XX"), weighted("A", 1), weighted("B", 3)), spacing=0).render(30)) == [
+    assert vis(
+        table(
+            table_row(text("XX"), weighted("A", 1), weighted("B", 3)), spacing=0
+        ).render(30)
+    ) == [
         "XXA······B····················",
     ]
 

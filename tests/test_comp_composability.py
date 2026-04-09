@@ -16,14 +16,18 @@ from terminal import (
 
 
 def test_vstack_in_hstack():
-    assert vis(hstack(vstack(text("a"), text("b")), text("c"), spacing=1).render(20)) == [
+    assert vis(
+        hstack(vstack(text("a"), text("b")), text("c"), spacing=1).render(20)
+    ) == [
         "a·c",
         "b··",
     ]
 
 
 def test_hstack_in_vstack():
-    assert vis(vstack(hstack(text("a"), text("b"), spacing=1), text("c")).render(20)) == [
+    assert vis(
+        vstack(hstack(text("a"), text("b"), spacing=1), text("c")).render(20)
+    ) == [
         "a·b",
         "c",
     ]

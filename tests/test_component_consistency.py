@@ -10,7 +10,6 @@ from terminal import Renderable, cond, foreach, hstack, scroll, text, vstack, zs
 from terminal.components.scroll import ScrollState
 from terminal.measure import display_width, strip_ansi
 
-
 # ── grow delegation ───────────────────────────────────────────────────
 # Every wrapper that delegates flex_basis must also delegate grow.
 

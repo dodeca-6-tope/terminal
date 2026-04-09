@@ -172,7 +172,9 @@ def test_fill_uses_parent_height():
 
 def test_fill_with_offset():
     s = _state(2)
-    assert clean(scroll(text("a"), text("b"), text("c"), text("d"), state=s).render(80, 2)) == [
+    assert clean(
+        scroll(text("a"), text("b"), text("c"), text("d"), state=s).render(80, 2)
+    ) == [
         "c",
         "d",
     ]

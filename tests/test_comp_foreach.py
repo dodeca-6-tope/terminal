@@ -6,7 +6,9 @@ from terminal import foreach, text
 
 
 def test_renders_items():
-    assert vis(foreach(["a", "b", "c"], lambda item, i: text(f"{i}:{item}")).render(80)) == [
+    assert vis(
+        foreach(["a", "b", "c"], lambda item, i: text(f"{i}:{item}")).render(80)
+    ) == [
         "0:a",
         "1:b",
         "2:c",

@@ -127,14 +127,18 @@ def test_center_left():
 def test_center_alignment():
     base = vstack(text("." * 20), text("." * 20), text("." * 20))
     lines = vis(
-        zstack(base, text("HI"), justify_content="center", align_items="center").render(20)
+        zstack(base, text("HI"), justify_content="center", align_items="center").render(
+            20
+        )
     )
     assert lines[1].index("H") == 9  # (20-2)//2
 
 
 def test_bottom_right_alignment():
     assert vis(
-        zstack(_block(".", 10, 3), text("X"), justify_content="end", align_items="end").render(10)
+        zstack(
+            _block(".", 10, 3), text("X"), justify_content="end", align_items="end"
+        ).render(10)
     ) == [
         "..........",
         "..........",
@@ -155,7 +159,12 @@ def test_overlay_clips_vertically():
 
 def test_overlay_clips_when_offset():
     lines = vis(
-        zstack(_block(".", 10, 5), _block("X", 3, 4), justify_content="center", align_items="end").render(10)
+        zstack(
+            _block(".", 10, 5),
+            _block("X", 3, 4),
+            justify_content="center",
+            align_items="end",
+        ).render(10)
     )
     assert len(lines) == 5
     assert "X" in lines[4]
@@ -171,14 +180,18 @@ def test_overlay_clips_width():
 
 
 def test_overlay_clips_width_when_offset():
-    lines = vis(zstack(_block(".", 10, 3), _block("X", 6, 1), justify_content="end").render(10))
+    lines = vis(
+        zstack(_block(".", 10, 3), _block("X", 6, 1), justify_content="end").render(10)
+    )
     assert len(lines[0]) == 10
     assert lines[0].count("X") == 6
 
 
 def test_overlay_larger_than_base_clips_both_axes():
     lines = vis(
-        zstack(_block("X", 12, 10), justify_content="center", align_items="center").render(7, 5)
+        zstack(
+            _block("X", 12, 10), justify_content="center", align_items="center"
+        ).render(7, 5)
     )
     assert len(lines) == 5
     assert all(len(l) == 7 for l in lines)
@@ -275,7 +288,9 @@ def test_nested_zstack_at_all_9_spots():
         )
         assert len(lines) == outer_h
         assert any("B" in l for l in lines), f"jc={jc},ai={ai}: inner base not visible"
-        assert any("X" in l for l in lines), f"jc={jc},ai={ai}: inner overlay not visible"
+        assert any("X" in l for l in lines), (
+            f"jc={jc},ai={ai}: inner overlay not visible"
+        )
 
 
 # ── Flex properties ──────────────────────────────────────────────
@@ -366,7 +381,9 @@ def test_split_at_col_wide_chars():
 
 def test_overlay_on_wide_char_base():
     lines = vis(
-        zstack(text("你好世界"), text("AB"), justify_content="center", align_items="center").render(8)
+        zstack(
+            text("你好世界"), text("AB"), justify_content="center", align_items="center"
+        ).render(8)
     )
     assert "AB" in lines[0]
 

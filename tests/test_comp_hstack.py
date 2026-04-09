@@ -5,7 +5,6 @@ from helpers import vis
 from terminal import cond, hstack, scroll, text, vstack
 from terminal.components.scroll import ScrollState
 
-
 # ── Fixed layout ─────────────────────────────────────────────────────
 
 
@@ -26,7 +25,9 @@ def test_empty():
 
 
 def test_multiline_children():
-    assert vis(hstack(vstack(text("a"), text("b")), text("c"), spacing=1).render(20)) == [
+    assert vis(
+        hstack(vstack(text("a"), text("b")), text("c"), spacing=1).render(20)
+    ) == [
         "a·c",
         "b··",
     ]

@@ -6,7 +6,6 @@ from terminal import Text, box, text
 from terminal.components.text import truncate
 from terminal.measure import strip_ansi
 
-
 # ── Render ───────────────────────────────────────────────────────────
 
 
