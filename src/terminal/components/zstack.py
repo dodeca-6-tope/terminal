@@ -93,7 +93,6 @@ def zstack(
     children_list = list(children)
 
     basis = max((c.flex_basis for c in children_list), default=0)
-    r_grow = max((c.grow for c in children_list), default=0)
 
     def render(w: int, h: int | None = None) -> list[str]:
         if not children_list:
@@ -117,4 +116,4 @@ def zstack(
                 canvas[row_off + i] = _stamp(canvas[row_off + i], col_off, layer[i], w)
         return canvas
 
-    return frame(Renderable(render, basis, r_grow), width, height, grow, bg, overflow)
+    return frame(Renderable(render, basis), width, height, grow, bg, overflow)

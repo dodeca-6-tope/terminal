@@ -647,6 +647,7 @@ def test_scrollbar_composes_with_hstack():
         hstack(
             scroll(*[text(str(i)) for i in range(20)], state=s),
             scrollbar(state=s),
+            grow=1,
         ),
     )
     lines = view.render(20, 5)

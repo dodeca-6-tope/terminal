@@ -107,8 +107,6 @@ def hstack(
     gap_total = spacing * max(0, len(act) - 1)
     basis = sum(c.flex_basis for c in act) + gap_total
 
-    grow_w = max((c.grow for c in children_list), default=0)
-
     def render_wrap(w: int) -> list[str]:
         if not children_list:
             return [""]
@@ -137,4 +135,4 @@ def hstack(
             return render_wrap(w)
         return render_fixed(w, h)
 
-    return frame(Renderable(render, basis, grow_w), width, height, grow, bg, overflow)
+    return frame(Renderable(render, basis), width, height, grow, bg, overflow)

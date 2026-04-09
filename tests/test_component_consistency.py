@@ -25,25 +25,19 @@ def test_cond_delegates_grow_false():
     assert cond(False, text("x", grow=1)).grow == 0
 
 
-def test_foreach_delegates_grow():
+def test_foreach_grow_not_propagated():
     fe = foreach(["a"], lambda item, i: text(str(item), grow=1))
-    assert fe.grow
+    assert not fe.grow
 
-
-def test_foreach_grow_no_growers():
     fe = foreach(["a"], lambda item, i: text(str(item)))
     assert fe.grow == 0
 
-
-def test_foreach_grow_empty():
     fe = foreach([], lambda item, i: text(str(item)))
     assert fe.grow == 0
 
-
-def test_foreach_delegates_grow_from_scroll():
     s = ScrollState()
     fe = foreach(["a"], lambda item, i: scroll(text(item), state=s))
-    assert fe.grow == 1
+    assert not fe.grow
 
 
 # ── Height pass-through: only growers receive height ──────────────────
@@ -97,13 +91,13 @@ def test_cond_propagates_flex_grow_weight():
     assert c.grow == inner.grow
 
 
-def test_foreach_propagates_max_flex_grow():
+def test_foreach_no_propagation():
     s = ScrollState()
     fe = foreach(
         ["a", "b"],
         lambda item, i: scroll(text(item), state=s) if i == 0 else text(item),
     )
-    assert fe.grow == 1
+    assert not fe.grow
 
 
 # ── All containers: flex methods match on empty ───────────────────────

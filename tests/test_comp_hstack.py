@@ -140,8 +140,8 @@ def test_wrap_ansi_text():
 # ── flex_grow propagation ───────────────────────────────────────────
 
 
-def test_flex_grow_from_child():
-    assert hstack(text("a"), text("b", grow=1)).grow
+def test_grow_not_propagated_from_child():
+    assert not hstack(text("a"), text("b", grow=1)).grow
 
 
 def test_flex_grow_false_without_growers():
@@ -184,6 +184,7 @@ def test_height_passed_to_scroll_child():
         hstack(
             scroll(*[text(str(i)) for i in range(20)], state=s),
             text("R"),
+            grow=1,
         ),
     )
     lines = view.render(20, 10)
@@ -199,6 +200,7 @@ def test_height_not_passed_to_fixed_child():
         hstack(
             scroll(*[text(str(i)) for i in range(20)], state=s),
             text("side"),
+            grow=1,
         ),
     )
     lines = view.render(40, 8)
@@ -207,11 +209,11 @@ def test_height_not_passed_to_fixed_child():
     assert s.height == 8
 
 
-def test_flex_grow_true_with_scroll():
-    """HStack with a scroll child should claim grow."""
+def test_grow_not_propagated():
+    """Stacks don't auto-propagate grow from children (CSS-aligned)."""
     s = ScrollState()
     h = hstack(scroll(text("a"), state=s), text("b"))
-    assert h.grow
+    assert not h.grow
 
 
 def test_hstack_in_vstack_scroll_gets_remaining_height():
@@ -221,6 +223,7 @@ def test_hstack_in_vstack_scroll_gets_remaining_height():
         text("header"),
         hstack(
             scroll(*[text(str(i)) for i in range(50)], state=s),
+            grow=1,
         ),
         text("footer"),
     )

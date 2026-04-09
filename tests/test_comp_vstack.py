@@ -101,8 +101,8 @@ def test_constrained_grower_gets_zero_when_fixed_fills():
 # ── flex_grow propagation ───────────────────────────────────────────
 
 
-def test_flex_grow_propagates_from_children():
-    assert vstack(text("a"), text("b", grow=1)).grow
+def test_grow_not_propagated_from_children():
+    assert not vstack(text("a"), text("b", grow=1)).grow
 
 
 def test_flex_grow_false_without_growers():

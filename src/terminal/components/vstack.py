@@ -48,7 +48,6 @@ def vstack(
     children_list = list(children)
 
     basis = max((c.flex_basis for c in children_list), default=0)
-    r_grow = max((c.grow for c in children_list), default=0)
 
     def join(parts: list[list[str]]) -> list[str]:
         if not spacing:
@@ -90,4 +89,4 @@ def vstack(
             return render_unconstrained(w)
         return render_constrained(w, h)
 
-    return frame(Renderable(render, basis, r_grow), width, height, grow, bg, overflow)
+    return frame(Renderable(render, basis), width, height, grow, bg, overflow)

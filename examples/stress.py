@@ -124,6 +124,7 @@ def view(s: S) -> t.Renderable:
         ),
         justify_content="end",
         align_items="end",
+        grow=1,
     )
 
     if s.show_help:
@@ -152,23 +153,19 @@ def view(s: S) -> t.Renderable:
             ),
             justify_content="center",
             align_items="center",
+            grow=1,
         )
 
     return t.vstack(
         t.hstack(
-            t.hstack(
-                t.text(t.bold(t.color(39, "◆ TORUS"))),
-                t.cond(s.paused, t.text(t.reverse(t.color(3, " PAUSED ")))),
-                spacing=1,
-            ),
-            t.hstack(
-                t.text(t.reverse(t.color(4, " ? "))),
-                t.text(t.dim("help")),
-                t.text(t.reverse(t.color(4, " q "))),
-                t.text(t.dim("quit")),
-                spacing=1,
-            ),
-            justify_content="between",
+            t.text(t.bold(t.color(39, "◆ TORUS"))),
+            t.cond(s.paused, t.text(t.reverse(t.color(3, " PAUSED ")))),
+            t.spacer(),
+            t.text(t.reverse(t.color(4, " ? "))),
+            t.text(t.dim("help")),
+            t.text(t.reverse(t.color(4, " q "))),
+            t.text(t.dim("quit")),
+            spacing=1,
         ),
         scene,
     )

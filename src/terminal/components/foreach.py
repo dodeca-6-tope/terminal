@@ -22,7 +22,6 @@ def foreach(
     children = [render_fn(item, i) for i, item in enumerate(items)]
 
     basis = max((c.flex_basis for c in children), default=0)
-    r_grow = max((c.grow for c in children), default=0)
 
     def render(w: int, h: int | None = None) -> list[str]:
         lines: list[str] = []
@@ -30,4 +29,4 @@ def foreach(
             lines.extend(child.render(w, h))
         return lines
 
-    return frame(Renderable(render, basis, r_grow), width, height, grow, bg, overflow)
+    return frame(Renderable(render, basis), width, height, grow, bg, overflow)

@@ -354,18 +354,14 @@ def test_flex_basis_is_max():
     assert zstack(text("short"), text("longer text")).flex_basis == 11
 
 
-def test_flex_grow_if_any_child_grows():
-    assert zstack(text("hi"), text("fill", grow=1)).grow
+def test_grow_not_propagated():
+    assert not zstack(text("hi"), text("fill", grow=1)).grow
     assert not zstack(text("hi"), text("no")).grow
 
-
-def test_flex_grow_propagates():
     from terminal import scroll
 
     s = ScrollState()
-    z = zstack(scroll(text("a"), state=s))
-    assert z.grow
-    assert not zstack(text("a")).grow
+    assert not zstack(scroll(text("a"), state=s)).grow
 
 
 # ── Edge cases ───────────────────────────────────────────────────
