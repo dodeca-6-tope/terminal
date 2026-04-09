@@ -10,6 +10,7 @@ def cond(
     child: Renderable,
     width: str | None = None,
     height: str | None = None,
+    grow: int | None = None,
     bg: int | None = None,
     overflow: str = "visible",
 ) -> Renderable:
@@ -20,4 +21,4 @@ def cond(
 
         return Renderable(_empty)
 
-    return frame(child, width, height, bg, overflow)
+    return frame(child, width, height, grow, bg, overflow)

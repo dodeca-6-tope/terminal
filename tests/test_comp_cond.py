@@ -28,26 +28,26 @@ def test_flex_basis():
     assert cond(False, text("hello")).flex_basis == 0
 
 
-def test_flex_grow_height_true():
+def test_grow_true():
     from terminal.components.scroll import ScrollState
 
     s = ScrollState()
     from terminal import scroll
 
-    assert cond(True, scroll(text("a"), state=s)).flex_grow_height
+    assert cond(True, scroll(text("a"), state=s)).grow
 
 
-def test_flex_grow_height_false_condition():
+def test_grow_false_condition():
     from terminal.components.scroll import ScrollState
 
     s = ScrollState()
     from terminal import scroll
 
-    assert not cond(False, scroll(text("a"), state=s)).flex_grow_height
+    assert not cond(False, scroll(text("a"), state=s)).grow
 
 
-def test_flex_grow_height_non_grower():
-    assert not cond(True, text("a")).flex_grow_height
+def test_grow_non_grower():
+    assert not cond(True, text("a")).grow
 
 
 def test_height_passed_to_child():

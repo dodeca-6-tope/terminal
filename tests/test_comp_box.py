@@ -79,8 +79,8 @@ def test_flex_basis_accounts_for_title():
 
 
 def test_flex_grow_passthrough():
-    assert box(text("hi", width="100%")).flex_grow_width
-    assert not box(text("hi")).flex_grow_width
+    assert box(text("hi"), grow=1).grow == 1
+    assert not box(text("hi")).grow
 
 
 def test_empty_child():
@@ -114,10 +114,10 @@ def test_height_none_unconstrained():
     assert len(lines) == 3  # top + content + bottom
 
 
-def test_flex_grow_height_delegates():
+def test_flex_grow_delegates():
     s = ScrollState()
-    assert box(scroll(text("a"), state=s)).flex_grow_height
-    assert not box(text("a")).flex_grow_height
+    assert box(scroll(text("a"), state=s)).grow
+    assert not box(text("a")).grow
 
 
 # ── Title position ──────────────────────────────────────────────────

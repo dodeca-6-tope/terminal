@@ -11,17 +11,14 @@ def vstack(
     spacing: int = 0,
     width: str | None = None,
     height: str | None = None,
+    grow: int | None = None,
     bg: int | None = None,
     overflow: str = "visible",
 ) -> Renderable:
     children_list = list(children)
 
     basis = max((c.flex_basis for c in children_list), default=0)
-    grow_w = max(
-        (c.flex_grow_width for c in children_list),
-        default=0,
-    )
-    grow_h = max((c.flex_grow_height for c in children_list), default=0)
+    r_grow = max((c.grow for c in children_list), default=0)
 
     def join(parts: list[list[str]]) -> list[str]:
         if not spacing:
@@ -40,28 +37,42 @@ def vstack(
         if not children_list:
             return [""] * h
 
+        # Separate explicit-height children from flex-grow children
+        has_height = {i for i, c in enumerate(children_list) if c.height is not None}
         weights = [
-            (i, c.flex_grow_height)
+            (i, c.grow)
             for i, c in enumerate(children_list)
-            if c.flex_grow_height
+            if c.grow and i not in has_height
         ]
-        if not weights:
+        if not weights and not has_height:
             return render_unconstrained(w)
 
-        grower_set = {i for i, _ in weights}
+        deferred = {i for i, _ in weights} | has_height
         fixed = [
-            None if i in grower_set else c.render(w)
-            for i, c in enumerate(children_list)
+            None if i in deferred else c.render(w) for i, c in enumerate(children_list)
         ]
         used = spacing * max(0, len(children_list) - 1)
         used += sum(len(r) for r in fixed if r is not None)
+        # Account for explicit-height children in space budget
+        resolved_heights = {
+            i: c.resolve_height(h)
+            for i, c in enumerate(children_list)
+            if i in has_height
+        }
+        used += sum(v for v in resolved_heights.values() if v is not None)
         remaining = max(0, h - used)
         shares = distribute(remaining, [wt for _, wt in weights])
-        heights = {i: ht for (i, _), ht in zip(weights, shares)}
+        flex_heights = {i: ht for (i, _), ht in zip(weights, shares)}
 
+        # Pass full h to explicit-height children (frame resolves their
+        # spec once against h), allocated height to flex children.
         return join(
             [
-                f if (f := fixed[i]) is not None else child.render(w, heights[i])
+                f
+                if (f := fixed[i]) is not None
+                else child.render(w, h)
+                if i in has_height
+                else child.render(w, flex_heights[i])
                 for i, child in enumerate(children_list)
             ]
         )
@@ -71,4 +82,4 @@ def vstack(
             return render_unconstrained(w)
         return render_constrained(w, h)
 
-    return frame(Renderable(render, basis, grow_w, grow_h), width, height, bg, overflow)
+    return frame(Renderable(render, basis, r_grow), width, height, grow, bg, overflow)

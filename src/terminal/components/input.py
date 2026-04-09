@@ -268,6 +268,7 @@ def input(
     active: bool = True,
     width: str | None = None,
     height: str | None = None,
+    grow: int | None = None,
     bg: int | None = None,
     overflow: str = "visible",
 ) -> Renderable:
@@ -288,4 +289,4 @@ def input(
             return _wrap_with_cursor(txt, cur, w)
         return _wrap(txt, w)
 
-    return frame(Renderable(render, basis, 0, 0), width, height, bg, overflow)
+    return frame(Renderable(render, basis), width, height, grow, bg, overflow)

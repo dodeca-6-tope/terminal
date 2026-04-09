@@ -3,11 +3,14 @@
 ``Renderable`` is the core type — a render function plus flex properties.
 ``frame`` wraps a Renderable with size constraints and background.
 
-Accepted size values:
+Accepted size values (width / height):
     None       — no constraint (default)
     "50%"      — percentage of the parent dimension (falls back to
                  terminal size when no parent is available)
     "28"       — fixed number of columns / rows
+
+``grow`` is separate from size — it maps to CSS ``flex-grow`` and controls
+how remaining space is distributed among siblings in a flex container.
 """
 
 from __future__ import annotations
@@ -23,10 +26,17 @@ RenderFn = Callable[..., list[str]]
 class Renderable:
     render: RenderFn
     flex_basis: int = 0
-    flex_grow_width: int = 0
-    flex_grow_height: int = 0
-    width: int | None = None
-    height: int | None = None
+    grow: int = 0
+    width: str | None = None
+    height: str | None = None
+
+    def resolve_width(self, parent: int) -> int | None:
+        """Resolve width spec against *parent* width. None if unspecified."""
+        return _resolve(self.width, parent, 0)
+
+    def resolve_height(self, parent: int) -> int | None:
+        """Resolve height spec against *parent* height. None if unspecified."""
+        return _resolve(self.height, parent, 1)
 
 
 _OVERFLOW = {"visible", "hidden", "ellipsis"}
@@ -36,29 +46,32 @@ def frame(
     child: Renderable,
     width: str | None = None,
     height: str | None = None,
+    grow: int | None = None,
     bg: int | None = None,
     overflow: str = "visible",
 ) -> Renderable:
     """Wrap *child* with size constraints and/or background."""
     if overflow not in _OVERFLOW:
         raise ValueError(f"unknown overflow {overflow!r}")
-    if width is None and height is None and bg is None and overflow == "visible":
+    if (
+        width is None
+        and height is None
+        and grow is None
+        and bg is None
+        and overflow == "visible"
+    ):
         return child
 
     fw = _fixed(width)
-    fh = _fixed(height)
     basis = fw if fw is not None else child.flex_basis
-    grow_w = 0 if fw is not None else (_pct(width) or child.flex_grow_width)
-    grow_h = 0 if fh is not None else (_pct(height) or child.flex_grow_height)
+    r_grow = grow if grow is not None else child.grow
 
     def render(w: int, h: int | None = None) -> list[str]:
         rw = _resolve(width, w, 0)
         rh = _resolve(height, h, 1)
         cw = min(rw, w) if rw is not None else w
-        lines = child.render(
-            cw,
-            min(rh, h) if rh is not None and h is not None else (rh or h),
-        )
+        ch = min(rh, h) if rh is not None and h is not None else (rh or h)
+        lines = child.render(cw, ch)
         if rw is not None and overflow != "visible":
             from terminal.measure import display_width
             from terminal.screen import clip, clip_and_pad
@@ -68,13 +81,16 @@ def frame(
                     clip(l, cw - 1) + "…" if display_width(l) > cw else l for l in lines
                 ]
             lines = [clip_and_pad(l, cw) for l in lines]
-        if rh is not None and len(lines) < rh:
-            lines.extend([""] * (rh - len(lines)))
+        if rh is not None:
+            if overflow != "visible" and len(lines) > rh:
+                lines = lines[:rh]
+            elif len(lines) < rh:
+                lines.extend([""] * (rh - len(lines)))
         if bg is not None:
             lines = _apply_bg(lines, bg, cw)
         return lines
 
-    return Renderable(render, basis, grow_w, grow_h, width=fw, height=fh)
+    return Renderable(render, basis, r_grow, width=width, height=height)
 
 
 def _apply_bg(lines: list[str], color: int, width: int) -> list[str]:
@@ -94,12 +110,6 @@ def _resolve(value: str | None, parent: int | None, axis: int) -> int | None:
         base = parent if parent is not None else os.get_terminal_size()[axis]
         return base * int(value[:-1]) // 100
     return int(value)
-
-
-def _pct(value: str | None) -> int:
-    if value is None or not value.endswith("%"):
-        return 0
-    return int(value[:-1])
 
 
 def _fixed(value: str | None) -> int | None:

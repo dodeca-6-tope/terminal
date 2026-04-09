@@ -153,7 +153,7 @@ def test_wide_table():
     rows = [
         table_row(
             text(f"id-{i}"),
-            text(f"name-{i}", width="100%"),
+            text(f"name-{i}", grow=1),
             text("active" if i % 2 else "inactive"),
             text(str(i * 100)),
             text("details..."),
@@ -230,7 +230,7 @@ def test_realistic_frame():
             items,
             lambda item, sel: hstack(
                 text("▸ " if sel else "  "),
-                text(f"Item {item.key}", width="100%", overflow="ellipsis"),
+                text(f"Item {item.key}", grow=1, overflow="ellipsis"),
                 text("✓" if item.key % 3 == 0 else " "),
             ),
         )

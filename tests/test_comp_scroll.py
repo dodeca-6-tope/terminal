@@ -155,20 +155,14 @@ def test_flex_basis_empty():
 
 def test_flex_grow_when_child_grows():
     s = _state()
-    sc = scroll(text("x", width="100%"), state=s)
-    assert sc.flex_grow_width
+    sc = scroll(text("x", grow=1), state=s)
+    assert sc.grow
 
 
-def test_flex_grow_height_fill():
+def test_flex_grow_fill():
     s = _state()
     sc = scroll(text("a"), state=s)
-    assert sc.flex_grow_height
-
-
-def test_no_flex_grow_height_fixed():
-    s = _state()
-    sc = scroll(text("a"), state=s, height="10")
-    assert not sc.flex_grow_height
+    assert sc.grow
 
 
 # ── height="fill" ───────────────────────────────────────────────────
@@ -733,10 +727,10 @@ def test_scroll_to_bottom_enables_follow():
     assert s.follow is True
 
 
-def test_scroll_always_grows_horizontally():
+def test_scroll_always_grows():
     s = ScrollState()
     sc = scroll(text("short"), state=s)
-    assert sc.flex_grow_width
+    assert sc.grow
 
 
 # ── Scroll + Scrollbar end-to-end ─────────────────────────────────

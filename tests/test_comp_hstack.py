@@ -141,24 +141,22 @@ def test_wrap_ansi_text():
 
 
 def test_flex_grow_from_child():
-    assert hstack(text("a"), text("b", width="100%")).flex_grow_width
+    assert hstack(text("a"), text("b", grow=1)).grow
 
 
 def test_flex_grow_false_without_growers():
-    assert not hstack(text("a"), text("b")).flex_grow_width
+    assert not hstack(text("a"), text("b")).grow
 
 
-def test_justify_implies_flex_grow():
-    """Non-start justify modes need extra space, so they imply flex_grow."""
-    assert hstack(text("a"), justify_content="center").flex_grow_width
-    assert hstack(text("a"), justify_content="end").flex_grow_width
-    assert hstack(text("a"), justify_content="between").flex_grow_width
-    assert not hstack(text("a"), justify_content="start").flex_grow_width
+def test_justify_does_not_imply_grow():
+    """justify_content is independent of grow (CSS-aligned)."""
+    assert not hstack(text("a"), justify_content="center").grow
+    assert not hstack(text("a"), justify_content="between").grow
 
 
 def test_justify_gets_space_in_hstack():
     """A justify_content=between hstack inside an outer hstack should spread items."""
-    inner = hstack(text("L"), text("R"), justify_content="between")
+    inner = hstack(text("L"), text("R"), justify_content="between", grow=1)
     outer = hstack(inner)
     result = clean(outer.render(20))[0]
     assert result.startswith("L")
@@ -180,7 +178,7 @@ def test_invalid_justify_content_raises():
 
 
 def test_height_passed_to_scroll_child():
-    """HStack should forward height to children with flex_grow_height."""
+    """HStack should forward height to children with grow."""
     s = ScrollState()
     view = vstack(
         hstack(
@@ -195,7 +193,7 @@ def test_height_passed_to_scroll_child():
 
 
 def test_height_not_passed_to_fixed_child():
-    """Children without flex_grow_height should not receive height."""
+    """Children without grow should not receive height."""
     s = ScrollState()
     view = vstack(
         hstack(
@@ -209,11 +207,11 @@ def test_height_not_passed_to_fixed_child():
     assert s.height == 8
 
 
-def test_flex_grow_height_true_with_scroll():
-    """HStack with a scroll child should claim flex_grow_height."""
+def test_flex_grow_true_with_scroll():
+    """HStack with a scroll child should claim grow."""
     s = ScrollState()
     h = hstack(scroll(text("a"), state=s), text("b"))
-    assert h.flex_grow_height
+    assert h.grow
 
 
 def test_hstack_in_vstack_scroll_gets_remaining_height():

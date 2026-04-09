@@ -6,7 +6,7 @@ from terminal.components.table import table, table_row
 from terminal.measure import display_width, strip_ansi
 
 
-def weighted(label: str, grow: int = 0, grow_height: int = 0) -> Renderable:
+def weighted(label: str, grow: int = 0) -> Renderable:
     def render(width: int, height: int | None = None) -> list[str]:
         lines = [label[:width].ljust(width)]
         if height is not None:
@@ -14,7 +14,7 @@ def weighted(label: str, grow: int = 0, grow_height: int = 0) -> Renderable:
                 lines.append(" " * width)
         return lines
 
-    return Renderable(render, flex_grow_width=grow, flex_grow_height=grow_height)
+    return Renderable(render, grow=grow)
 
 
 def clean(lines: list[str]) -> list[str]:
@@ -97,8 +97,8 @@ def test_hstack_weight_with_spacing():
 
 
 def test_vstack_equal_height_weights():
-    a = weighted("A", grow_height=1)
-    b = weighted("B", grow_height=1)
+    a = weighted("A", grow=1)
+    b = weighted("B", grow=1)
     lines = vstack(a, b).render(10, 20)
     assert len(lines) == 20
     # Each gets 10 rows
@@ -107,8 +107,8 @@ def test_vstack_equal_height_weights():
 
 
 def test_vstack_2_to_1_height():
-    a = weighted("A", grow_height=2)
-    b = weighted("B", grow_height=1)
+    a = weighted("A", grow=2)
+    b = weighted("B", grow=1)
     lines = vstack(a, b).render(10, 30)
     assert len(lines) == 30
     # A gets 20, B gets 10
@@ -117,9 +117,9 @@ def test_vstack_2_to_1_height():
 
 
 def test_vstack_mixed_fixed_and_weighted():
-    header = text("HEAD")  # 1 line, no grow_height
-    a = weighted("A", grow_height=1)
-    b = weighted("B", grow_height=2)
+    header = text("HEAD")  # 1 line, no grow
+    a = weighted("A", grow=1)
+    b = weighted("B", grow=2)
     lines = vstack(header, a, b).render(10, 31)
     assert len(lines) == 31
     # header=1, remaining=30 → A=10, B=20
@@ -129,9 +129,9 @@ def test_vstack_mixed_fixed_and_weighted():
 
 
 def test_vstack_uneven_height_remainder():
-    a = weighted("A", grow_height=1)
-    b = weighted("B", grow_height=1)
-    c = weighted("C", grow_height=1)
+    a = weighted("A", grow=1)
+    b = weighted("B", grow=1)
+    c = weighted("C", grow=1)
     lines = vstack(a, b, c).render(5, 20)
     # 20*1//3=6, 20*2//3=13, 20*3//3=20 → A=6, B=7, C=7
     assert len(lines) == 20
@@ -170,11 +170,9 @@ def test_table_weighted_with_fixed():
 
 def test_default_flex_grow_is_zero():
     c = text("")
-    assert c.flex_grow_width == 0
-    assert c.flex_grow_height == 0
+    assert c.grow == 0
 
 
 def test_weighted_component_returns_weight():
-    w = weighted("x", grow=3, grow_height=5)
-    assert w.flex_grow_width == 3
-    assert w.flex_grow_height == 5
+    w = weighted("x", grow=3)
+    assert w.grow == 3

@@ -19,7 +19,7 @@ class _Empty:
         return [""]
 
 
-_EMPTY_CELL = Renderable(_Empty().render, 0, 0, 0)
+_EMPTY_CELL = Renderable(_Empty().render, 0, 0)
 
 
 def _measure_columns(rows: list[TableRow]) -> tuple[list[int], dict[int, int]]:
@@ -30,7 +30,7 @@ def _measure_columns(rows: list[TableRow]) -> tuple[list[int], dict[int, int]]:
     grow_cols: dict[int, int] = {}
     for ci, cell in cells:
         col_widths[ci] = max(col_widths[ci], cell.flex_basis)
-        g = cell.flex_grow_width
+        g = cell.grow
         if g:
             grow_cols[ci] = max(grow_cols.get(ci, 0), g)
     return col_widths, grow_cols
@@ -73,6 +73,7 @@ def table(
     spacing: int = 1,
     width: str | None = None,
     height: str | None = None,
+    grow: int | None = None,
     bg: int | None = None,
     overflow: str = "visible",
 ) -> Renderable:
@@ -89,7 +90,7 @@ def table(
         gap_total = spacing * max(0, len(col_widths) - 1)
         basis = sum(col_widths) + gap_total
 
-    grow_w = max(grow_cols.values()) if grow_cols else 0
+    r_grow = max(grow_cols.values()) if grow_cols else 0
 
     def render(w: int, h: int | None = None) -> list[str]:
         if not rows_list:
@@ -100,4 +101,4 @@ def table(
         sep = " " * spacing
         return [_render_row(row, resolved, sep) for row in rows_list]
 
-    return frame(Renderable(render, basis, grow_w, 0), width, height, bg, overflow)
+    return frame(Renderable(render, basis, r_grow), width, height, grow, bg, overflow)

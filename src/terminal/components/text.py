@@ -90,12 +90,6 @@ class Text:
     def flex_basis(self) -> int:
         return self._visible + self._pad_left + self._pad_right
 
-    def flex_grow_width(self) -> int:
-        return 0
-
-    def flex_grow_height(self) -> int:
-        return 0
-
     def render(self, width: int, height: int | None = None) -> list[str]:
         inner = width - self._pad_left - self._pad_right
         pad = " " * self._pad_left
@@ -119,6 +113,7 @@ def text(
     padding_right: int | None = None,
     width: str | None = None,
     height: str | None = None,
+    grow: int | None = None,
     bg: int | None = None,
     overflow: str = "visible",
 ) -> Renderable:
@@ -130,9 +125,10 @@ def text(
         padding_right=padding_right,
     )
     return frame(
-        Renderable(t.render, t.flex_basis(), t.flex_grow_width(), t.flex_grow_height()),
+        Renderable(t.render, t.flex_basis()),
         width,
         height,
+        grow,
         bg,
         overflow,
     )

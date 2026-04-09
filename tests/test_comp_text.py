@@ -138,8 +138,8 @@ def test_flex_basis_with_100pct_width():
 
 
 def test_flex_grow_with_100pct_width():
-    assert text("hello", width="100%").flex_grow_width
-    assert not text("hello").flex_grow_width
+    assert text("hello", grow=1).grow
+    assert not text("hello").grow
 
 
 # ── Display width ────────────────────────────────────────────────────

@@ -94,7 +94,7 @@ def _torus(a: float, b: float) -> t.Renderable:
             theta += 0.07
         return ["".join(row) for row in grid]
 
-    return t.Renderable(render, flex_grow_width=1, flex_grow_height=1)
+    return t.Renderable(render, grow=1)
 
 
 def view(s: S) -> t.Renderable:

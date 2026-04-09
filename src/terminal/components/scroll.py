@@ -51,6 +51,7 @@ def scroll(
     state: ScrollState,
     width: str | None = None,
     height: str | None = None,
+    grow: int | None = None,
     bg: int | None = None,
     overflow: str = "visible",
 ) -> Renderable:
@@ -83,4 +84,4 @@ def scroll(
 
         return lines
 
-    return frame(Renderable(render, basis, 1, 1), width, height, bg, overflow)
+    return frame(Renderable(render, basis, 1), width, height, grow, bg, overflow)

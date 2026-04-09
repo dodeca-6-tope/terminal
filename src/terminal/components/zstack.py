@@ -85,6 +85,7 @@ def zstack(
     align_items: str = "start",
     width: str | None = None,
     height: str | None = None,
+    grow: int | None = None,
     bg: int | None = None,
     overflow: str = "visible",
 ) -> Renderable:
@@ -95,8 +96,7 @@ def zstack(
     children_list = list(children)
 
     basis = max((c.flex_basis for c in children_list), default=0)
-    grow_w = max((c.flex_grow_width for c in children_list), default=0)
-    grow_h = max((c.flex_grow_height for c in children_list), default=0)
+    r_grow = max((c.grow for c in children_list), default=0)
 
     def render(w: int, h: int | None = None) -> list[str]:
         if not children_list:
@@ -109,8 +109,8 @@ def zstack(
         for ci, layer in enumerate(layers):
             child = children_list[ci]
             rendered_w = max((display_width(l) for l in layer), default=0)
-            layer_w = child.width if child.width is not None else rendered_w
-            layer_h = child.height if child.height is not None else len(layer)
+            layer_w = child.resolve_width(canvas_w) or rendered_w
+            layer_h = child.resolve_height(canvas_h) or len(layer)
             row_off, col_off = _offsets(
                 justify_content,
                 align_items,
@@ -125,4 +125,4 @@ def zstack(
                 )
         return canvas
 
-    return frame(Renderable(render, basis, grow_w, grow_h), width, height, bg, overflow)
+    return frame(Renderable(render, basis, r_grow), width, height, grow, bg, overflow)

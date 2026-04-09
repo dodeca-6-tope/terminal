@@ -24,6 +24,7 @@ def box(
     padding: int = 0,
     width: str | None = None,
     height: str | None = None,
+    grow: int | None = None,
     bg: int | None = None,
     overflow: str = "visible",
 ) -> Renderable:
@@ -31,7 +32,7 @@ def box(
         raise ValueError(f"unknown border style {style!r}")
 
     def inner_width(w: int) -> int:
-        if child.flex_grow_width:
+        if child.grow:
             return max(0, w - 2)
         content_w = child.flex_basis + padding * 2
         title_w = display_width(title) + 2 if title else 0
@@ -47,8 +48,7 @@ def box(
     content_w = child.flex_basis + padding * 2
     title_w = display_width(title) + 2 if title else 0
     basis = max(content_w, title_w) + 2
-    grow_w = child.flex_grow_width
-    grow_h = child.flex_grow_height
+    r_grow = child.grow
 
     def render(w: int, h: int | None = None) -> list[str]:
         _, _, bl, br, hz, v = BORDERS[style]
@@ -70,4 +70,4 @@ def box(
         lines.append(f"{bl}{hz * inner}{br}")
         return lines
 
-    return frame(Renderable(render, basis, grow_w, grow_h), width, height, bg, overflow)
+    return frame(Renderable(render, basis, r_grow), width, height, grow, bg, overflow)

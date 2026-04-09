@@ -38,6 +38,7 @@ def hstack(
     wrap: bool = False,
     width: str | None = None,
     height: str | None = None,
+    grow: int | None = None,
     bg: int | None = None,
     overflow: str = "visible",
 ) -> Renderable:
@@ -48,19 +49,17 @@ def hstack(
     children_list = list(children)
 
     def active() -> list[Renderable]:
-        return [c for c in children_list if c.flex_basis > 0 or c.flex_grow_width]
+        return [
+            c
+            for c in children_list
+            if c.flex_basis > 0 or c.grow or c.width is not None
+        ]
 
     act = active()
     gap_total = spacing * max(0, len(act) - 1)
     basis = sum(c.flex_basis for c in act) + gap_total
 
-    child_max = max((c.flex_grow_width for c in children_list), default=0)
-    grow_w = max(1, child_max) if justify_content != "start" else child_max
-
-    grow_h = max(
-        (c.flex_grow_height for c in children_list),
-        default=0,
-    )
+    grow_w = max((c.grow for c in children_list), default=0)
 
     def justify_between(cells: list[str], remaining: int) -> str:
         gaps = len(cells) - 1
@@ -98,10 +97,10 @@ def hstack(
         if not act:
             return [""] * h if h else [""]
 
-        col_widths = [c.flex_basis for c in act]
-        weights = [
-            (i, c.flex_grow_width) for i, c in enumerate(act) if c.flex_grow_width
-        ]
+        # Resolve explicit-width children for layout; flex children use basis
+        col_widths = [c.resolve_width(w) or c.flex_basis for c in act]
+        # Flex-grow distribution (only children without explicit width)
+        weights = [(i, c.grow) for i, c in enumerate(act) if c.grow and c.width is None]
         gt = spacing * max(0, len(act) - 1)
         remaining = max(0, w - sum(col_widths) - gt)
 
@@ -112,10 +111,12 @@ def hstack(
                 col_widths[i] += extra
             remaining = 0
 
+        # Render: pass full w to explicit-width children (frame resolves
+        # their spec once against w), allocated width to flex children.
         columns = [
-            c.render(col_widths[i], h)
-            if c.flex_grow_height
-            else c.render(col_widths[i])
+            c.render(w if c.width is not None else col_widths[i], h)
+            if c.grow
+            else c.render(w if c.width is not None else col_widths[i])
             for i, c in enumerate(act)
         ]
         max_rows = max((len(col) for col in columns), default=0)
@@ -145,4 +146,4 @@ def hstack(
             return render_wrap(w)
         return render_fixed(w, h)
 
-    return frame(Renderable(render, basis, grow_w, grow_h), width, height, bg, overflow)
+    return frame(Renderable(render, basis, grow_w), width, height, grow, bg, overflow)

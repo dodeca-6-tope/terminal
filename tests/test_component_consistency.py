@@ -13,55 +13,42 @@ def clean(lines: list[str]) -> list[str]:
     return [strip_ansi(l) for l in lines]
 
 
-# ── flex_grow_width delegation ────────────────────────────────────────
-# Every wrapper that delegates flex_basis must also delegate flex_grow_width.
+# ── grow delegation ───────────────────────────────────────────────────
+# Every wrapper that delegates flex_basis must also delegate grow.
 
 
-def test_cond_delegates_flex_grow_width_true():
-    assert cond(True, text("x", width="100%")).flex_grow_width
+def test_cond_delegates_grow_true():
+    assert cond(True, text("x", grow=1)).grow
 
 
-def test_cond_delegates_flex_grow_width_false():
-    assert cond(False, text("x", width="100%")).flex_grow_width == 0
+def test_cond_delegates_grow_false():
+    assert cond(False, text("x", grow=1)).grow == 0
 
 
-def test_foreach_delegates_flex_grow_width():
-    fe = foreach(["a"], lambda item, i: text(str(item), width="100%"))
-    assert fe.flex_grow_width
+def test_foreach_delegates_grow():
+    fe = foreach(["a"], lambda item, i: text(str(item), grow=1))
+    assert fe.grow
 
 
-def test_foreach_flex_grow_width_no_growers():
+def test_foreach_grow_no_growers():
     fe = foreach(["a"], lambda item, i: text(str(item)))
-    assert fe.flex_grow_width == 0
+    assert fe.grow == 0
 
 
-def test_foreach_flex_grow_width_empty():
+def test_foreach_grow_empty():
     fe = foreach([], lambda item, i: text(str(item)))
-    assert fe.flex_grow_width == 0
+    assert fe.grow == 0
 
 
-# ── flex_grow_height delegation ───────────────────────────────────────
-
-
-def test_foreach_delegates_flex_grow_height():
+def test_foreach_delegates_grow_from_scroll():
     s = ScrollState()
     fe = foreach(["a"], lambda item, i: scroll(text(item), state=s))
-    assert fe.flex_grow_height == 1
-
-
-def test_foreach_flex_grow_height_no_growers():
-    fe = foreach(["a"], lambda item, i: text(str(item)))
-    assert fe.flex_grow_height == 0
-
-
-def test_foreach_flex_grow_height_empty():
-    fe = foreach([], lambda item, i: text(str(item)))
-    assert fe.flex_grow_height == 0
+    assert fe.grow == 1
 
 
 # ── Height pass-through: only growers receive height ──────────────────
 # HStack, ZStack, and ForEach should all follow the same rule: pass height
-# to children with flex_grow_height, not to fixed children.
+# to children with grow, not to fixed children.
 
 
 def _make_scroll(n: int = 20) -> tuple[ScrollState, list[Renderable]]:
@@ -105,11 +92,9 @@ def test_foreach_passes_height_to_children():
 
 def test_cond_propagates_flex_grow_weight():
     s1 = ScrollState()
-    # scroll has flex_grow_height=1, but we can test that it propagates exactly
     inner = scroll(text("a"), state=s1)
     c = cond(True, inner)
-    assert c.flex_grow_width == inner.flex_grow_width
-    assert c.flex_grow_height == inner.flex_grow_height
+    assert c.grow == inner.grow
 
 
 def test_foreach_propagates_max_flex_grow():
@@ -118,8 +103,7 @@ def test_foreach_propagates_max_flex_grow():
         ["a", "b"],
         lambda item, i: scroll(text(item), state=s) if i == 0 else text(item),
     )
-    assert fe.flex_grow_width == 1  # scroll has grow_width=1
-    assert fe.flex_grow_height == 1  # scroll has grow_height=1
+    assert fe.grow == 1
 
 
 # ── All containers: flex methods match on empty ───────────────────────
@@ -132,18 +116,11 @@ def test_empty_flex_basis():
     assert foreach([], lambda item, i: text(str(item))).flex_basis == 0
 
 
-def test_empty_flex_grow_width():
-    assert hstack().flex_grow_width == 0
-    assert vstack().flex_grow_width == 0
-    assert zstack().flex_grow_width == 0
-    assert foreach([], lambda item, i: text(str(item))).flex_grow_width == 0
-
-
-def test_empty_flex_grow_height():
-    assert hstack().flex_grow_height == 0
-    assert vstack().flex_grow_height == 0
-    assert zstack().flex_grow_height == 0
-    assert foreach([], lambda item, i: text(str(item))).flex_grow_height == 0
+def test_empty_grow():
+    assert hstack().grow == 0
+    assert vstack().grow == 0
+    assert zstack().grow == 0
+    assert foreach([], lambda item, i: text(str(item))).grow == 0
 
 
 # ── Cond in HStack flex grow ──────────────────────────────────────────
@@ -151,14 +128,14 @@ def test_empty_flex_grow_height():
 
 
 def test_cond_fill_text_grows_in_hstack():
-    c = hstack(text("L"), cond(True, text("R", width="100%")))
+    c = hstack(text("L"), cond(True, text("R", grow=1)))
     result = clean(c.render(20))
     # The fill text should expand to fill remaining space
     assert len(result[0]) == 20
 
 
 def test_cond_false_fill_text_no_grow_in_hstack():
-    c = hstack(text("L"), cond(False, text("R", width="100%")))
+    c = hstack(text("L"), cond(False, text("R", grow=1)))
     result = clean(c.render(20))
     assert result[0].strip() == "L"
 

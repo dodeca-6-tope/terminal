@@ -26,8 +26,9 @@ def scrollbar_default(h: int, total: int, offset: int) -> list[str]:
 def scrollbar(
     state: ScrollState,
     render_fn: ScrollbarFn = scrollbar_default,
-    width: str | None = None,
+    width: str | None = "1",
     height: str | None = None,
+    grow: int | None = None,
     bg: int | None = None,
     overflow: str = "visible",
 ) -> Renderable:
@@ -37,4 +38,4 @@ def scrollbar(
             return [""] * (sh or 0)
         return render_fn(sh, state.total, state.offset)
 
-    return frame(Renderable(render, 1, 0, 1), width, height, bg, overflow)
+    return frame(Renderable(render, 1, 1), width, height, grow, bg, overflow)

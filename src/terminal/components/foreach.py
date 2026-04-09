@@ -15,14 +15,14 @@ def foreach(
     render_fn: Callable[[T, int], Renderable],
     width: str | None = None,
     height: str | None = None,
+    grow: int | None = None,
     bg: int | None = None,
     overflow: str = "visible",
 ) -> Renderable:
     children = [render_fn(item, i) for i, item in enumerate(items)]
 
     basis = max((c.flex_basis for c in children), default=0)
-    grow_w = max((c.flex_grow_width for c in children), default=0)
-    grow_h = max((c.flex_grow_height for c in children), default=0)
+    r_grow = max((c.grow for c in children), default=0)
 
     def render(w: int, h: int | None = None) -> list[str]:
         lines: list[str] = []
@@ -30,4 +30,4 @@ def foreach(
             lines.extend(child.render(w, h))
         return lines
 
-    return frame(Renderable(render, basis, grow_w, grow_h), width, height, bg, overflow)
+    return frame(Renderable(render, basis, r_grow), width, height, grow, bg, overflow)

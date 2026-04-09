@@ -64,6 +64,7 @@ def list(
     render_fn: Callable[[T, bool], Renderable],
     width: str | None = None,
     height: str | None = None,
+    grow: int | None = None,
     bg: int | None = None,
     overflow: str = "visible",
 ) -> Renderable:
@@ -93,4 +94,4 @@ def list(
             lines.extend([""] * (h - len(lines)))
         return lines
 
-    return frame(Renderable(render, 0, 1, 1), width, height, bg, overflow)
+    return frame(Renderable(render, 0, 1), width, height, grow, bg, overflow)
