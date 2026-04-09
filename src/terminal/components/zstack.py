@@ -6,11 +6,8 @@ from terminal.components.base import Renderable, frame
 from terminal.measure import ANSI_RE, char_width, display_width
 from terminal.screen import clip
 
-_JUSTIFY = {"start", "end", "center"}
-_ALIGN = {"start", "end", "center"}
-
-_V = {"start": 0, "center": 0.5, "end": 1}
-_H = {"start": 0, "center": 0.5, "end": 1}
+_ALIGNMENTS = {"start", "end", "center"}
+_FRAC = {"start": 0, "center": 0.5, "end": 1}
 
 
 def _offsets(
@@ -22,8 +19,8 @@ def _offsets(
     """Compute (row_offset, col_offset) for alignment."""
     w, h = canvas
     lw, lh = layer
-    vf = _V.get(align_items, 0)
-    hf = _H.get(justify_content, 0)
+    vf = _FRAC.get(align_items, 0)
+    hf = _FRAC.get(justify_content, 0)
     return max(0, int((h - lh) * vf)), max(0, int((w - lw) * hf))
 
 
@@ -89,9 +86,9 @@ def zstack(
     bg: int | None = None,
     overflow: str = "visible",
 ) -> Renderable:
-    if justify_content not in _JUSTIFY:
+    if justify_content not in _ALIGNMENTS:
         raise ValueError(f"unknown justify_content {justify_content!r}")
-    if align_items not in _ALIGN:
+    if align_items not in _ALIGNMENTS:
         raise ValueError(f"unknown align_items {align_items!r}")
     children_list = list(children)
 
@@ -102,27 +99,22 @@ def zstack(
         if not children_list:
             return [""] * h if h else [""]
         layers = [c.render(w, h) for c in children_list]
-        base = layers[0]
-        canvas_w = w
-        canvas_h = h if h is not None else len(base)
-        canvas = [" " * canvas_w for _ in range(canvas_h)]
-        for ci, layer in enumerate(layers):
-            child = children_list[ci]
+        canvas_h = h if h is not None else len(layers[0])
+        canvas = [" " * w for _ in range(canvas_h)]
+        for child, layer in zip(children_list, layers):
             rendered_w = max((display_width(l) for l in layer), default=0)
-            layer_w = child.resolve_width(canvas_w) or rendered_w
+            layer_w = child.resolve_width(w) or rendered_w
             layer_h = child.resolve_height(canvas_h) or len(layer)
             row_off, col_off = _offsets(
                 justify_content,
                 align_items,
-                (canvas_w, canvas_h),
+                (w, canvas_h),
                 (layer_w, layer_h),
             )
             start = max(0, -row_off)
             end = min(len(layer), canvas_h - row_off)
             for i in range(start, end):
-                canvas[row_off + i] = _stamp(
-                    canvas[row_off + i], col_off, layer[i], canvas_w
-                )
+                canvas[row_off + i] = _stamp(canvas[row_off + i], col_off, layer[i], w)
         return canvas
 
     return frame(Renderable(render, basis, r_grow), width, height, grow, bg, overflow)

@@ -8,7 +8,7 @@ from typing import Generic, TypeVar
 
 from terminal.components.base import Renderable, frame
 from terminal.components.keyed import Keyed
-from terminal.components.scroll import ScrollState
+from terminal.components.scroll import ScrollState, fill_viewport
 
 T = TypeVar("T", bound=Keyed)
 
@@ -81,17 +81,9 @@ def list(
         state.scroll.offset = max(0, min(state.scroll.offset, state.scroll.max_offset))
         offset = state.scroll.offset
 
-        lines: builtins.list[str] = []
-        for i in range(offset, total):
-            child = render_fn(state.items[i], i == state.cursor)
-            rendered = child.render(w)
-            remaining = h - len(lines)
-            if len(rendered) >= remaining:
-                lines.extend(rendered[:remaining])
-                break
-            lines.extend(rendered)
-        if len(lines) < h:
-            lines.extend([""] * (h - len(lines)))
-        return lines
+        items = (
+            render_fn(state.items[i], i == state.cursor) for i in range(offset, total)
+        )
+        return fill_viewport(items, w, h)
 
     return frame(Renderable(render, 0, 1), width, height, grow, bg, overflow)

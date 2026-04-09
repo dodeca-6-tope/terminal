@@ -42,6 +42,27 @@ class Renderable:
 _OVERFLOW = {"visible", "hidden", "ellipsis"}
 
 
+def _clip_overflow(lines: list[str], width: int, overflow: str) -> list[str]:
+    """Clip lines to width using the given overflow mode."""
+    from terminal.measure import display_width
+    from terminal.screen import clip, clip_and_pad
+
+    if overflow == "ellipsis":
+        lines = [
+            clip(l, width - 1) + "…" if display_width(l) > width else l for l in lines
+        ]
+    return [clip_and_pad(l, width) for l in lines]
+
+
+def _fit_height(lines: list[str], h: int, clips: bool) -> list[str]:
+    """Truncate or pad lines to exactly h rows."""
+    if clips and len(lines) > h:
+        return lines[:h]
+    if len(lines) < h:
+        return lines + [""] * (h - len(lines))
+    return lines
+
+
 def frame(
     child: Renderable,
     width: str | None = None,
@@ -65,6 +86,7 @@ def frame(
     fw = _fixed(width)
     basis = fw if fw is not None else child.flex_basis
     r_grow = grow if grow is not None else child.grow
+    clips = overflow != "visible"
 
     def render(w: int, h: int | None = None) -> list[str]:
         rw = _resolve(width, w, 0)
@@ -72,20 +94,10 @@ def frame(
         cw = min(rw, w) if rw is not None else w
         ch = min(rh, h) if rh is not None and h is not None else (rh or h)
         lines = child.render(cw, ch)
-        if rw is not None and overflow != "visible":
-            from terminal.measure import display_width
-            from terminal.screen import clip, clip_and_pad
-
-            if overflow == "ellipsis":
-                lines = [
-                    clip(l, cw - 1) + "…" if display_width(l) > cw else l for l in lines
-                ]
-            lines = [clip_and_pad(l, cw) for l in lines]
+        if rw is not None and clips:
+            lines = _clip_overflow(lines, cw, overflow)
         if rh is not None:
-            if overflow != "visible" and len(lines) > rh:
-                lines = lines[:rh]
-            elif len(lines) < rh:
-                lines.extend([""] * (rh - len(lines)))
+            lines = _fit_height(lines, rh, clips)
         if bg is not None:
             lines = _apply_bg(lines, bg, cw)
         return lines

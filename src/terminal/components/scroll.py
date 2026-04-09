@@ -2,7 +2,24 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 from terminal.components.base import Renderable, frame
+
+
+def fill_viewport(items: Iterator[Renderable], w: int, h: int) -> list[str]:
+    """Render items into a viewport of h rows, stopping when full."""
+    lines: list[str] = []
+    for child in items:
+        rendered = child.render(w)
+        remaining = h - len(lines)
+        if len(rendered) >= remaining:
+            lines.extend(rendered[:remaining])
+            break
+        lines.extend(rendered)
+    if len(lines) < h:
+        lines.extend([""] * (h - len(lines)))
+    return lines
 
 
 class ScrollState:
@@ -71,17 +88,6 @@ def scroll(
         if state.offset >= state.max_offset:
             state.follow = True
 
-        lines: list[str] = []
-        for child in children_list[state.offset :]:
-            rendered = child.render(w)
-            remaining = h - len(lines)
-            if len(rendered) >= remaining:
-                lines.extend(rendered[:remaining])
-                break
-            lines.extend(rendered)
-        if len(lines) < h:
-            lines.extend([""] * (h - len(lines)))
-
-        return lines
+        return fill_viewport(iter(children_list[state.offset :]), w, h)
 
     return frame(Renderable(render, basis, 1), width, height, grow, bg, overflow)

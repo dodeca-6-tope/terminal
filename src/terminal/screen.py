@@ -85,18 +85,14 @@ class Screen:
         size = os.get_terminal_size()
         rows: int = size.lines
         cols: int = size.columns
-        resized = rows != self._rows or cols != self._cols
+        full = rows != self._rows or cols != self._cols or not self._screen
         n_content = min(len(lines), rows)
         frame = [clip_and_pad(line, cols) for line in lines[:n_content]]
-        if resized or not self._screen:
+        if full:
             frame += [" " * cols] * (rows - len(frame))
-        else:
-            n_clear = max(0, len(self._screen) - n_content)
-            frame += [" " * cols] * n_clear
-
-        if resized or not self._screen:
             body = render_full(frame)
         else:
+            frame += [" " * cols] * max(0, len(self._screen) - n_content)
             body = render_diff(frame, self._screen)
         self._write(f"\033[?2026h{body}\033[?2026l".encode())
         self._flush()

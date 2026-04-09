@@ -30,6 +30,59 @@ _JUSTIFY_CONTENT = {"start", "end", "center", "between"}
 _ALIGN_ITEMS = {"start", "end", "center"}
 
 
+def _aligned_cell(col: list[str], row: int, max_rows: int, align: str) -> str:
+    if align == "end":
+        offset = max_rows - len(col)
+        return col[row - offset] if row >= offset else ""
+    if align == "center":
+        offset = (max_rows - len(col)) // 2
+        return col[row - offset] if offset <= row < offset + len(col) else ""
+    return col[row] if row < len(col) else ""
+
+
+def _justify_row(cells: list[str], remaining: int, spacing: int, mode: str) -> str:
+    gap = " " * spacing
+    joined = gap.join(cells)
+    if remaining <= 0 or mode == "start":
+        return joined
+    if mode == "end":
+        return " " * remaining + joined
+    if mode == "center":
+        return " " * (remaining // 2) + joined
+    if mode == "between" and len(cells) > 1:
+        extras = distribute(remaining, [1] * (len(cells) - 1))
+        sep = [" " * (spacing + e) for e in extras]
+        return "".join(c + s for c, s in zip(cells, sep)) + cells[-1]
+    return joined
+
+
+def _resolve_col_widths(
+    act: list[Renderable], w: int, spacing: int
+) -> tuple[list[int], int]:
+    """Resolve column widths and leftover space for flex-grow distribution."""
+    col_widths = [c.resolve_width(w) or c.flex_basis for c in act]
+    weights = [(i, c.grow) for i, c in enumerate(act) if c.grow and c.width is None]
+    remaining = max(0, w - sum(col_widths) - spacing * max(0, len(act) - 1))
+    if weights:
+        for (i, _), extra in zip(
+            weights, distribute(remaining, [wt for _, wt in weights])
+        ):
+            col_widths[i] += extra
+        remaining = 0
+    return col_widths, remaining
+
+
+def _render_columns(
+    act: list[Renderable], col_widths: list[int], w: int, h: int | None
+) -> list[list[str]]:
+    """Render each child at its resolved column width."""
+    columns: list[list[str]] = []
+    for i, c in enumerate(act):
+        cw = w if c.width is not None else col_widths[i]
+        columns.append(c.render(cw, h) if c.grow else c.render(cw))
+    return columns
+
+
 def hstack(
     *children: Renderable,
     spacing: int = 0,
@@ -48,43 +101,13 @@ def hstack(
         raise ValueError(f"unknown align_items {align_items!r}")
     children_list = list(children)
 
-    def active() -> list[Renderable]:
-        return [
-            c
-            for c in children_list
-            if c.flex_basis > 0 or c.grow or c.width is not None
-        ]
-
-    act = active()
+    act = [
+        c for c in children_list if c.flex_basis > 0 or c.grow or c.width is not None
+    ]
     gap_total = spacing * max(0, len(act) - 1)
     basis = sum(c.flex_basis for c in act) + gap_total
 
     grow_w = max((c.grow for c in children_list), default=0)
-
-    def justify_between(cells: list[str], remaining: int) -> str:
-        gaps = len(cells) - 1
-        per_gap = remaining // gaps
-        extra = remaining % gaps
-        parts: list[str] = []
-        for i, cell in enumerate(cells):
-            parts.append(cell)
-            if i < gaps:
-                parts.append(" " * (spacing + per_gap + (1 if i < extra else 0)))
-        return "".join(parts)
-
-    def justify_row(cells: list[str], remaining: int) -> str:
-        gap = " " * spacing
-        joined = gap.join(cells)
-
-        if remaining <= 0 or justify_content == "start":
-            return joined
-        if justify_content == "end":
-            return " " * remaining + joined
-        if justify_content == "center":
-            return " " * (remaining // 2) + joined
-        if justify_content == "between" and len(cells) > 1:
-            return justify_between(cells, remaining)
-        return joined
 
     def render_wrap(w: int) -> list[str]:
         if not children_list:
@@ -93,52 +116,20 @@ def hstack(
         return _wrap_chunks(strs, w, spacing)
 
     def render_fixed(w: int, h: int | None = None) -> list[str]:
-        act = active()
         if not act:
             return [""] * h if h else [""]
 
-        # Resolve explicit-width children for layout; flex children use basis
-        col_widths = [c.resolve_width(w) or c.flex_basis for c in act]
-        # Flex-grow distribution (only children without explicit width)
-        weights = [(i, c.grow) for i, c in enumerate(act) if c.grow and c.width is None]
-        gt = spacing * max(0, len(act) - 1)
-        remaining = max(0, w - sum(col_widths) - gt)
-
-        if weights:
-            for (i, _), extra in zip(
-                weights, distribute(remaining, [wt for _, wt in weights])
-            ):
-                col_widths[i] += extra
-            remaining = 0
-
-        # Render: pass full w to explicit-width children (frame resolves
-        # their spec once against w), allocated width to flex children.
-        columns = [
-            c.render(w if c.width is not None else col_widths[i], h)
-            if c.grow
-            else c.render(w if c.width is not None else col_widths[i])
-            for i, c in enumerate(act)
-        ]
+        col_widths, remaining = _resolve_col_widths(act, w, spacing)
+        columns = _render_columns(act, col_widths, w, h)
         max_rows = max((len(col) for col in columns), default=0)
 
         lines: list[str] = []
         for row in range(max_rows):
-            cells: list[str] = []
-            for i, col in enumerate(columns):
-                cell = col[row] if row < len(col) else ""
-                if align_items == "end":
-                    cell = (
-                        col[row - max_rows + len(col)]
-                        if row >= max_rows - len(col)
-                        else ""
-                    )
-                elif align_items == "center":
-                    offset = (max_rows - len(col)) // 2
-                    cell = (
-                        col[row - offset] if offset <= row < offset + len(col) else ""
-                    )
-                cells.append(pad(cell, col_widths[i]))
-            lines.append(justify_row(cells, remaining))
+            cells = [
+                pad(_aligned_cell(col, row, max_rows, align_items), col_widths[i])
+                for i, col in enumerate(columns)
+            ]
+            lines.append(_justify_row(cells, remaining, spacing, justify_content))
         return lines
 
     def render(w: int, h: int | None = None) -> list[str]:

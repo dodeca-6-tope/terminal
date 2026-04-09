@@ -14,12 +14,11 @@ class TableRow:
         self.cells = list(cells)
 
 
-class _Empty:
-    def render(self, width: int, height: int | None = None) -> list[str]:
-        return [""]
+def _empty_render(w: int, h: int | None = None) -> list[str]:
+    return [""]
 
 
-_EMPTY_CELL = Renderable(_Empty().render, 0, 0)
+_EMPTY_CELL = Renderable(_empty_render)
 
 
 def _measure_columns(rows: list[TableRow]) -> tuple[list[int], dict[int, int]]:
@@ -81,14 +80,10 @@ def table(
 
     if rows_list:
         col_widths, grow_cols = _measure_columns(rows_list)
+        basis = sum(col_widths) + spacing * max(0, len(col_widths) - 1)
     else:
         col_widths, grow_cols = [], {}
-
-    if not rows_list:
         basis = 0
-    else:
-        gap_total = spacing * max(0, len(col_widths) - 1)
-        basis = sum(col_widths) + gap_total
 
     r_grow = max(grow_cols.values()) if grow_cols else 0
 
