@@ -79,7 +79,16 @@ class Text:
         self._wrap = wrap
         self._truncation = truncation
         self._lines = raw.splitlines() or [""]
-        self._visible = max((display_width(l) for l in self._lines), default=0)
+        lines = self._lines
+        if len(lines) == 1:
+            self._visible = display_width(lines[0])
+        else:
+            w = 0
+            for l in lines:
+                lw = display_width(l)
+                if lw > w:
+                    w = lw
+            self._visible = w
         self._pad_left = padding if padding_left is None else padding_left
         self._pad_right = padding if padding_right is None else padding_right
 

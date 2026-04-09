@@ -1,10 +1,23 @@
 """Display-width measurement — ANSI-aware, wide-char-aware."""
 
 import re
+from functools import lru_cache
 
 from terminal._buffer import char_width as _cwidth
+from terminal._buffer import display_width as _c_display_width
 
 ANSI_RE = re.compile(r"\033\[[^@-~]*[@-~]")
+
+
+@lru_cache(maxsize=4096)
+def _cached_display_width(s: str) -> int:
+    return _c_display_width(s)
+
+
+def display_width(s: str) -> int:
+    if len(s) < 512:
+        return _cached_display_width(s)
+    return _c_display_width(s)
 
 
 def strip_ansi(s: str) -> str:
@@ -16,22 +29,6 @@ def strip_ansi(s: str) -> str:
 def char_width(ch: str) -> int:
     """Display width of a single character."""
     return _cwidth(ch)
-
-
-def display_width(s: str) -> int:
-    if "\033" not in s:
-        return len(s) if s.isascii() else _width_plain(s)
-    return _width_plain(ANSI_RE.sub("", s))
-
-
-def _width_plain(s: str) -> int:
-    """Width of a string with no ANSI codes — single-pass."""
-    w = 0
-    for ch in s:
-        cw = _cwidth(ch)
-        if cw > 0:
-            w += cw
-    return w
 
 
 def distribute(total: int, weights: list[int]) -> list[int]:

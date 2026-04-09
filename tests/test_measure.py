@@ -78,3 +78,21 @@ def test_slice_at_width_empty():
 def test_slice_at_width_mixed():
     assert slice_at_width("a你b", 3) == "a你"
     assert slice_at_width("a你b", 2) == "a"
+
+
+# ── display_width: long strings (bypass cache) ────────────────────
+
+
+def test_display_width_long_ascii():
+    s = "a" * 1000
+    assert display_width(s) == 1000
+
+
+def test_display_width_long_wide():
+    s = "你" * 500
+    assert display_width(s) == 1000
+
+
+def test_display_width_long_ansi():
+    s = "\033[31m" + "x" * 600 + "\033[0m"
+    assert display_width(s) == 600

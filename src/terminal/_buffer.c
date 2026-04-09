@@ -458,13 +458,63 @@ static PyObject *mod_render_diff(PyObject *self, PyObject *args) {
     return outbuf_to_pystr(&out);
 }
 
+/* ── display_width ────────────────────────────────────────────────── */
+
+static PyObject *mod_display_width(PyObject *self, PyObject *arg) {
+    if (!PyUnicode_Check(arg)) {
+        PyErr_SetString(PyExc_TypeError, "expected a string");
+        return NULL;
+    }
+
+    Py_ssize_t len = PyUnicode_GET_LENGTH(arg);
+    if (len == 0)
+        return PyLong_FromLong(0);
+
+    /* Fast path: pure ASCII, no escapes */
+    if (PyUnicode_IS_ASCII(arg) &&
+        PyUnicode_FindChar(arg, 0x1B, 0, len, 1) < 0)
+        return PyLong_FromSsize_t(len);
+
+    int kind = PyUnicode_KIND(arg);
+    const void *data = PyUnicode_DATA(arg);
+
+    int width = 0;
+    Py_ssize_t pos = 0;
+
+    while (pos < len) {
+        Py_UCS4 ch = PyUnicode_READ(kind, data, pos);
+
+        /* Skip CSI sequences: ESC [ ... final_byte */
+        if (ch == 0x1B) {
+            if (pos + 1 < len && PyUnicode_READ(kind, data, pos + 1) == '[') {
+                Py_ssize_t end = pos + 2;
+                while (end < len) {
+                    Py_UCS4 fb = PyUnicode_READ(kind, data, end);
+                    if (fb >= 0x40 && fb <= 0x7E) { end++; break; }
+                    end++;
+                }
+                pos = end;
+            } else {
+                pos++;
+            }
+            continue;
+        }
+
+        width += cwidth(ch);
+        pos++;
+    }
+
+    return PyLong_FromLong(width);
+}
+
 /* ── Module definition ─────────────────────────────────────────────── */
 
 static PyMethodDef module_methods[] = {
     {"parse_line",  mod_parse_line,  METH_VARARGS, "Parse ANSI line into buffer row."},
     {"render_full", mod_render_full, METH_VARARGS, "Render entire buffer to ANSI."},
     {"render_diff", mod_render_diff, METH_VARARGS, "Render cell-level diff to ANSI."},
-    {"char_width",  mod_char_width,  METH_O,       "Display width of a single character."},
+    {"char_width",     mod_char_width,     METH_O,       "Display width of a single character."},
+    {"display_width",  mod_display_width,  METH_O,       "Display width of a string (ANSI-aware)."},
     {NULL}
 };
 
