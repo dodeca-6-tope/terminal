@@ -19,8 +19,8 @@ from terminal.term import Paste
 # ── TTY.render ────────────────────────────────────────────────────
 
 
-def test_render_writes_content() -> None:
-    """TTY.render() should write the given lines to the terminal."""
+def test_draw_writes_content() -> None:
+    """TTY.draw() should write the given lines to the terminal."""
     from os import terminal_size
     from unittest.mock import patch
 
@@ -32,7 +32,7 @@ def test_render_writes_content() -> None:
     t._screen = screen
     size = terminal_size((40, 10))
     with patch("terminal.screen.os.get_terminal_size", return_value=size):
-        t.render(["hello", "world"])
+        t.draw(["hello", "world"])
     output = "".join(chunks)
     assert "hello" in output
     assert "world" in output

@@ -80,8 +80,8 @@ class TTY:
             return "resize"
         return result
 
-    def render(self, lines: list[str]) -> None:
-        """Render a frame to the terminal."""
+    def draw(self, lines: list[str]) -> None:
+        """Draw a frame to the terminal."""
         self._screen.render(lines)
 
     @property
