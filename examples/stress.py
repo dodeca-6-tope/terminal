@@ -9,7 +9,8 @@ clip_and_pad, display_width, render_diff.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from collections import deque
+from dataclasses import dataclass, field
 
 from _torus import render_torus
 
@@ -23,7 +24,7 @@ class S:
     speed: float = 1.0
     paused: bool = False
     show_help: bool = False
-    render_time: float = 0.0
+    render_times: deque[float] = field(default_factory=lambda: deque(maxlen=60))
 
 
 def _torus(a: float, b: float) -> t.Renderable:
@@ -34,7 +35,8 @@ def _torus(a: float, b: float) -> t.Renderable:
 
 
 def view(s: S) -> t.Renderable:
-    fps = 1 / s.render_time if s.render_time > 0 else 0
+    avg = sum(s.render_times) / len(s.render_times) if s.render_times else 0
+    fps = 1 / avg if avg > 0 else 0
     fps_color = 2 if fps >= 200 else (3 if fps >= 60 else 1)
 
     scene = t.zstack(
@@ -112,10 +114,10 @@ if __name__ == "__main__":
             # render
             t0 = time.perf_counter()
             term.screen.render(view(s).render(term.size.columns, term.size.lines))
-            s.render_time = time.perf_counter() - t0
+            s.render_times.append(time.perf_counter() - t0)
 
             # input (timeout = remaining frame budget @ ~60fps)
-            key = term.readkey(max(0, 1 / 60 - s.render_time))
+            key = term.readkey(max(0, 1 / 60 - s.render_times[-1]))
             if key is None or key == "resize":
                 continue
             match key:
