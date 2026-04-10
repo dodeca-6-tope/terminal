@@ -15,7 +15,7 @@ from terminal.components.scroll import ScrollState, scroll
 from terminal.components.scrollbar import scrollbar, scrollbar_default
 from terminal.components.spacer import spacer
 from terminal.components.table import TableRow, table, table_row
-from terminal.components.text import Text, text
+from terminal.components.text import text
 from terminal.components.toast import Message, ToastState
 from terminal.components.vstack import vstack
 from terminal.components.zstack import zstack
@@ -29,7 +29,6 @@ __all__ = [
     "Renderable",
     "ScrollState",
     "TableRow",
-    "Text",
     "ToastState",
     "box",
     "cond",

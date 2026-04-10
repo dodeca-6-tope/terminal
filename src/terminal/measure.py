@@ -1,4 +1,6 @@
-"""Display-width measurement — ANSI-aware, wide-char-aware."""
+"""Display-width measurement and ANSI-aware string utilities."""
+
+from __future__ import annotations
 
 import re
 from functools import lru_cache
@@ -49,3 +51,13 @@ def slice_at_width(s: str, max_width: int) -> str:
             return s[:i]
         w += cw
     return s
+
+
+def truncate(s: str, max_width: int, ellipsis: bool = False) -> str:
+    """Truncate a string to max_width visible characters."""
+    stripped = strip_ansi(s)
+    if display_width(stripped) <= max_width:
+        return s
+    if ellipsis:
+        return slice_at_width(stripped, max_width - 1) + "…"
+    return slice_at_width(stripped, max_width)

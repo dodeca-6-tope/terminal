@@ -185,6 +185,60 @@ static PyObject *mod_char_width(PyObject *self, PyObject *arg) {
     return PyLong_FromLong(cwidth(ch));
 }
 
+/* ── Unicode helpers ──────────────────────────────────────────────── */
+
+/* Skip a CSI escape sequence (ESC [ ... final_byte) starting at pos.
+   Returns the position AFTER the sequence, or pos if not a CSI. */
+static inline Py_ssize_t skip_csi(const void *data, int kind,
+                                   Py_ssize_t pos, Py_ssize_t len) {
+    if (pos + 1 >= len || PyUnicode_READ(kind, data, pos + 1) != '[')
+        return pos;
+    Py_ssize_t end = pos + 2;
+    while (end < len) {
+        Py_UCS4 fb = PyUnicode_READ(kind, data, end);
+        end++;
+        if (fb >= 0x40 && fb <= 0x7E) break;
+    }
+    return end;
+}
+
+/* Compute display width of a Python unicode string (ANSI-aware). */
+static int str_display_width(PyObject *s) {
+    Py_ssize_t len = PyUnicode_GET_LENGTH(s);
+    if (len == 0) return 0;
+    /* Fast: pure ASCII, no escapes → width == length */
+    if (PyUnicode_IS_ASCII(s) &&
+        PyUnicode_FindChar(s, 0x1B, 0, len, 1) < 0)
+        return (int)len;
+    /* Slow: scan for wide chars and ANSI escapes */
+    int kind = PyUnicode_KIND(s);
+    const void *data = PyUnicode_DATA(s);
+    int width = 0;
+    for (Py_ssize_t pos = 0; pos < len; ) {
+        Py_UCS4 ch = PyUnicode_READ(kind, data, pos);
+        if (ch == 0x1B) { pos = skip_csi(data, kind, pos, len); continue; }
+        width += cwidth(ch);
+        pos++;
+    }
+    return width;
+}
+
+/* Check if a Python string is pure ASCII with no ANSI escapes. */
+static inline int is_plain_ascii(PyObject *s) {
+    return PyUnicode_IS_ASCII(s) &&
+           PyUnicode_FindChar(s, 0x1B, 0, PyUnicode_GET_LENGTH(s), 1) < 0;
+}
+
+/* Build a Python string of n spaces. */
+static PyObject *make_spaces(int n) {
+    char *buf = (char *)malloc(n);
+    if (!buf) return PyErr_NoMemory();
+    memset(buf, ' ', n);
+    PyObject *result = PyUnicode_FromStringAndSize(buf, n);
+    free(buf);
+    return result;
+}
+
 /* ── Buffer type ───────────────────────────────────────────────────── */
 
 typedef struct {
@@ -295,8 +349,7 @@ static PyObject *mod_parse_line(PyObject *self, PyObject *args) {
     const void *data = PyUnicode_DATA(line);
 
     /* Fast path: pure ASCII, no escapes */
-    if (PyUnicode_IS_ASCII(line) &&
-        PyUnicode_FindChar(line, 0x1B, 0, len, 1) < 0) {
+    if (is_plain_ascii(line)) {
         Py_ssize_t n = len < w ? len : w;
         const char *ascii = PyUnicode_AsUTF8(line);
         for (Py_ssize_t i = 0; i < n; i++)
@@ -313,13 +366,14 @@ static PyObject *mod_parse_line(PyObject *self, PyObject *args) {
         Py_UCS4 ch = PyUnicode_READ(kind, data, pos);
 
         if (ch == 0x1B) {
-            if (pos + 1 < len && PyUnicode_READ(kind, data, pos + 1) == '[') {
-                Py_ssize_t end = pos + 2;
-                while (end < len && PyUnicode_READ(kind, data, end) != 'm')
-                    end++;
-                parse_sgr(data, kind, pos + 2, end, &fg, &bg, &flags);
+            Py_ssize_t end = skip_csi(data, kind, pos, len);
+            if (end != pos) {
+                /* CSI: find 'm' terminator for SGR parsing */
+                Py_ssize_t m = pos + 2;
+                while (m < end && PyUnicode_READ(kind, data, m) != 'm') m++;
+                parse_sgr(data, kind, pos + 2, m, &fg, &bg, &flags);
                 style = fg | (bg << BG_SHIFT) | (flags << FLAGS_SHIFT);
-                pos = end + 1;
+                pos = end;
             } else {
                 pos++;
             }
@@ -465,46 +519,7 @@ static PyObject *mod_display_width(PyObject *self, PyObject *arg) {
         PyErr_SetString(PyExc_TypeError, "expected a string");
         return NULL;
     }
-
-    Py_ssize_t len = PyUnicode_GET_LENGTH(arg);
-    if (len == 0)
-        return PyLong_FromLong(0);
-
-    /* Fast path: pure ASCII, no escapes */
-    if (PyUnicode_IS_ASCII(arg) &&
-        PyUnicode_FindChar(arg, 0x1B, 0, len, 1) < 0)
-        return PyLong_FromSsize_t(len);
-
-    int kind = PyUnicode_KIND(arg);
-    const void *data = PyUnicode_DATA(arg);
-
-    int width = 0;
-    Py_ssize_t pos = 0;
-
-    while (pos < len) {
-        Py_UCS4 ch = PyUnicode_READ(kind, data, pos);
-
-        /* Skip CSI sequences: ESC [ ... final_byte */
-        if (ch == 0x1B) {
-            if (pos + 1 < len && PyUnicode_READ(kind, data, pos + 1) == '[') {
-                Py_ssize_t end = pos + 2;
-                while (end < len) {
-                    Py_UCS4 fb = PyUnicode_READ(kind, data, end);
-                    if (fb >= 0x40 && fb <= 0x7E) { end++; break; }
-                    end++;
-                }
-                pos = end;
-            } else {
-                pos++;
-            }
-            continue;
-        }
-
-        width += cwidth(ch);
-        pos++;
-    }
-
-    return PyLong_FromLong(width);
+    return PyLong_FromLong(str_display_width(arg));
 }
 
 /* ── render_flat_line ─────────────────────────────────────────────── */
@@ -555,8 +570,7 @@ static PyObject *mod_render_flat_line(PyObject *self, PyObject *arg) {
         /* ASCII content with no ANSI escapes: copy bytes directly.
            Content may be shorter than col_width — the buffer is
            pre-filled with spaces so padding is automatic. */
-        if (PyUnicode_IS_ASCII(content) &&
-            PyUnicode_FindChar(content, 0x1B, 0, clen, 1) < 0) {
+        if (is_plain_ascii(content)) {
             const Py_UCS1 *src = PyUnicode_1BYTE_DATA(content);
             Py_ssize_t copy = clen;
             if (off + copy > total) copy = total - off;
@@ -603,8 +617,7 @@ static PyObject *mod_hstack_join_row(PyObject *self, PyObject *args) {
     int all_ascii = 1;
     for (Py_ssize_t i = 0; i < n; i++) {
         PyObject *cell = PyList_GET_ITEM(cells, i);
-        if (!PyUnicode_IS_ASCII(cell) ||
-            PyUnicode_FindChar(cell, 0x1B, 0, PyUnicode_GET_LENGTH(cell), 1) >= 0) {
+        if (!is_plain_ascii(cell)) {
             all_ascii = 0;
             break;
         }
@@ -629,77 +642,456 @@ static PyObject *mod_hstack_join_row(PyObject *self, PyObject *args) {
         return out;
     }
 
-    /* ANSI path: build with Python string ops. */
-    /* Measure display width of each cell, then pad. */
+    /* ANSI path: copy content while tracking visible width for padding. */
     OutBuf ob;
     if (outbuf_init(&ob, total * 2) < 0)
         return PyErr_NoMemory();
 
     for (Py_ssize_t i = 0; i < n; i++) {
-        if (i > 0) {
+        if (i > 0)
             for (int s = 0; s < spacing; s++)
                 outbuf_add(&ob, " ", 1);
-        }
+
         long cw = PyLong_AsLong(PyList_GET_ITEM(widths, i));
         PyObject *cell = PyList_GET_ITEM(cells, i);
-
-        /* Copy cell content. */
         Py_ssize_t clen = PyUnicode_GET_LENGTH(cell);
         int kind = PyUnicode_KIND(cell);
         const void *data = PyUnicode_DATA(cell);
 
-        /* Compute display width while copying. */
         int vis = 0;
-        for (Py_ssize_t j = 0; j < clen; j++) {
+        for (Py_ssize_t j = 0; j < clen; ) {
             Py_UCS4 ch = PyUnicode_READ(kind, data, j);
-            char utf8[4];
-            int blen;
-            if (ch < 0x80) {
-                utf8[0] = (char)ch;
-                blen = 1;
-            } else if (ch < 0x800) {
-                utf8[0] = 0xC0 | (ch >> 6);
-                utf8[1] = 0x80 | (ch & 0x3F);
-                blen = 2;
-            } else if (ch < 0x10000) {
-                utf8[0] = 0xE0 | (ch >> 12);
-                utf8[1] = 0x80 | ((ch >> 6) & 0x3F);
-                utf8[2] = 0x80 | (ch & 0x3F);
-                blen = 3;
-            } else {
-                utf8[0] = 0xF0 | (ch >> 18);
-                utf8[1] = 0x80 | ((ch >> 12) & 0x3F);
-                utf8[2] = 0x80 | ((ch >> 6) & 0x3F);
-                utf8[3] = 0x80 | (ch & 0x3F);
-                blen = 4;
-            }
-            outbuf_add(&ob, utf8, blen);
+            char u8[4];
 
-            /* Track visible width (skip ANSI escapes). */
-            if (ch == 0x1B && j + 1 < clen &&
-                PyUnicode_READ(kind, data, j + 1) == '[') {
-                /* CSI sequence: ESC [ params final_byte */
-                j++;  /* skip '[' */
-                utf8[0] = '['; outbuf_add(&ob, utf8, 1);
-                j++;
-                while (j < clen) {
-                    Py_UCS4 fb = PyUnicode_READ(kind, data, j);
-                    utf8[0] = (char)fb; outbuf_add(&ob, utf8, 1);
-                    if (fb >= 0x40 && fb <= 0x7E) break;
-                    j++;
+            if (ch == 0x1B) {
+                /* Copy CSI escape sequence verbatim (doesn't count as visible). */
+                Py_ssize_t end = skip_csi(data, kind, j, clen);
+                for (Py_ssize_t k = j; k < end; k++) {
+                    Py_UCS4 ec = PyUnicode_READ(kind, data, k);
+                    outbuf_add(&ob, u8, encode_utf8(ec, u8));
                 }
-            } else if (ch != 0x1B) {
+                j = end;
+            } else {
+                outbuf_add(&ob, u8, encode_utf8(ch, u8));
                 vis += cwidth(ch);
+                j++;
             }
         }
 
         /* Pad to column width. */
-        int gap = (int)cw - vis;
-        for (int g = 0; g < gap; g++)
+        for (int g = vis; g < (int)cw; g++)
             outbuf_add(&ob, " ", 1);
     }
 
     return outbuf_to_pystr(&ob);
+}
+
+/* ── Renderable type ──────────────────────────────────────────────── */
+
+typedef struct {
+    PyObject_HEAD
+    PyObject *render;         /* callable: (w, h?) -> list[str] */
+    int       flex_basis;
+    int       grow;
+    PyObject *width;          /* str | Py_None */
+    PyObject *height;         /* str | Py_None */
+    PyObject *flat_children;  /* tuple | NULL (hstack flat path) */
+    int       flat_spacing;
+} CRenderableObject;
+
+static PyTypeObject CRenderableType; /* forward decl */
+
+static void CRenderable_dealloc(CRenderableObject *self) {
+    Py_XDECREF(self->render);
+    Py_XDECREF(self->width);
+    Py_XDECREF(self->height);
+    Py_XDECREF(self->flat_children);
+    Py_TYPE(self)->tp_free((PyObject *)self);
+}
+
+static int CRenderable_init(CRenderableObject *self, PyObject *args, PyObject *kw) {
+    static char *kwlist[] = {"render", "flex_basis", "grow", "width", "height", NULL};
+    PyObject *render = NULL, *width = Py_None, *height = Py_None;
+    int flex_basis = 0, grow = 0;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kw, "O|iiOO", kwlist,
+            &render, &flex_basis, &grow, &width, &height))
+        return -1;
+
+    Py_XDECREF(self->render);
+    Py_INCREF(render);
+    self->render = render;
+    self->flex_basis = flex_basis;
+    self->grow = grow;
+
+    Py_XDECREF(self->width);
+    Py_INCREF(width);
+    self->width = width;
+
+    Py_XDECREF(self->height);
+    Py_INCREF(height);
+    self->height = height;
+
+    /* Optional fields: NULL by default (Python sees None via T_OBJECT) */
+    Py_CLEAR(self->flat_children);
+    self->flat_spacing = 0;
+
+    return 0;
+}
+
+/* resolve "50%" or "28" against a parent dimension */
+static PyObject *resolve_dim(PyObject *value, int parent, int axis) {
+    if (value == NULL || value == Py_None)
+        Py_RETURN_NONE;
+    const char *s = PyUnicode_AsUTF8(value);
+    if (!s) return NULL;
+    Py_ssize_t slen = PyUnicode_GET_LENGTH(value);
+    if (slen > 0 && s[slen - 1] == '%') {
+        int pct = atoi(s);
+        int base = parent;
+        if (base <= 0) {
+            /* fallback: os.get_terminal_size()[axis] */
+            PyObject *os = PyImport_ImportModule("os");
+            if (!os) return NULL;
+            PyObject *gts = PyObject_CallMethod(os, "get_terminal_size", NULL);
+            Py_DECREF(os);
+            if (!gts) return NULL;
+            PyObject *item = PySequence_GetItem(gts, axis);
+            Py_DECREF(gts);
+            if (!item) return NULL;
+            base = (int)PyLong_AsLong(item);
+            Py_DECREF(item);
+        }
+        return PyLong_FromLong(base * pct / 100);
+    }
+    return PyLong_FromLong(atoi(s));
+}
+
+static PyObject *CRenderable_resolve_width(CRenderableObject *self, PyObject *args) {
+    int parent;
+    if (!PyArg_ParseTuple(args, "i", &parent)) return NULL;
+    return resolve_dim(self->width, parent, 0);
+}
+
+static PyObject *CRenderable_resolve_height(CRenderableObject *self, PyObject *args) {
+    int parent;
+    if (!PyArg_ParseTuple(args, "i", &parent)) return NULL;
+    return resolve_dim(self->height, parent, 1);
+}
+
+static PyMethodDef CRenderable_methods[] = {
+    {"resolve_width",  (PyCFunction)CRenderable_resolve_width,  METH_VARARGS, NULL},
+    {"resolve_height", (PyCFunction)CRenderable_resolve_height, METH_VARARGS, NULL},
+    {NULL}
+};
+
+static PyMemberDef CRenderable_members[] = {
+    {"render",        T_OBJECT_EX, offsetof(CRenderableObject, render),       0, NULL},
+    {"flex_basis",    T_INT,       offsetof(CRenderableObject, flex_basis),    0, NULL},
+    {"grow",          T_INT,       offsetof(CRenderableObject, grow),          0, NULL},
+    {"width",         T_OBJECT_EX, offsetof(CRenderableObject, width),        0, NULL},
+    {"height",        T_OBJECT_EX, offsetof(CRenderableObject, height),       0, NULL},
+    {"flat_children", T_OBJECT,    offsetof(CRenderableObject, flat_children), 0, NULL},
+    {"flat_spacing",  T_INT,       offsetof(CRenderableObject, flat_spacing),  0, NULL},
+    {NULL}
+};
+
+static PyTypeObject CRenderableType = {
+    .ob_base      = PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name      = "terminal.cbuf.Renderable",
+    .tp_basicsize = sizeof(CRenderableObject),
+    .tp_flags     = Py_TPFLAGS_DEFAULT,
+    .tp_new       = PyType_GenericNew,
+    .tp_init      = (initproc)CRenderable_init,
+    .tp_dealloc   = (destructor)CRenderable_dealloc,
+    .tp_methods   = CRenderable_methods,
+    .tp_members   = CRenderable_members,
+    .tp_doc       = "Renderable component with flex layout properties.",
+};
+
+/* ── TextRender callable type ─────────────────────────────────────── */
+
+#define TEXT_PLAIN    0
+#define TEXT_PADDED   1
+#define TEXT_FULL     2
+
+typedef struct {
+    PyObject_HEAD
+    int       mode;       /* TEXT_PLAIN / TEXT_PADDED / TEXT_FULL */
+    PyObject *lines;      /* list[str] — pre-computed */
+    int       pl, pr;     /* padding left / right */
+    PyObject *pad_l;      /* " " * pl or NULL */
+    PyObject *pad_r;      /* " " * pr or NULL */
+    PyObject *truncation; /* "tail"/"head"/"middle" or NULL */
+    int       wrap;       /* bool */
+} CTextRenderObject;
+
+static PyTypeObject CTextRenderType; /* forward decl */
+
+static void CTextRender_dealloc(CTextRenderObject *self) {
+    Py_XDECREF(self->lines);
+    Py_XDECREF(self->pad_l);
+    Py_XDECREF(self->pad_r);
+    Py_XDECREF(self->truncation);
+    Py_TYPE(self)->tp_free((PyObject *)self);
+}
+
+/* Cached reference to Python fallback for wrap/non-ASCII truncation. */
+static PyObject *py_text_full_render = NULL;
+
+static PyObject *CTextRender_call(CTextRenderObject *self,
+                                   PyObject *args, PyObject *kw) {
+    int w;
+    PyObject *h_obj = Py_None;
+    static char *kwlist[] = {"w", "h", NULL};
+    if (!PyArg_ParseTupleAndKeywords(args, kw, "i|O", kwlist, &w, &h_obj))
+        return NULL;
+
+    switch (self->mode) {
+    case TEXT_PLAIN:
+        /* Just return the pre-computed list. */
+        Py_INCREF(self->lines);
+        return self->lines;
+
+    case TEXT_PADDED: {
+        Py_ssize_t n = PyList_GET_SIZE(self->lines);
+        PyObject *result = PyList_New(n);
+        if (!result) return NULL;
+        for (Py_ssize_t i = 0; i < n; i++) {
+            PyObject *line = PyList_GET_ITEM(self->lines, i);
+            PyObject *padded = PyUnicode_FromFormat("%U%U%U",
+                self->pad_l, line, self->pad_r);
+            if (!padded) { Py_DECREF(result); return NULL; }
+            PyList_SET_ITEM(result, i, padded);
+        }
+        return result;
+    }
+
+    case TEXT_FULL: {
+        int inner = w - self->pl - self->pr;
+
+        /* C fast path: single-line plain-ASCII with tail truncation.
+           Covers the hot case (list items).  Everything else → Python. */
+        if (!self->wrap && self->truncation != NULL &&
+            PyList_GET_SIZE(self->lines) == 1 && inner > 0) {
+            PyObject *line = PyList_GET_ITEM(self->lines, 0);
+            const char *tmode = PyUnicode_AsUTF8(self->truncation);
+            if (is_plain_ascii(line) && tmode && tmode[0] == 't') {
+                Py_ssize_t slen = PyUnicode_GET_LENGTH(line);
+                PyObject *str;
+                if (slen <= inner) {
+                    Py_INCREF(line);
+                    str = line;
+                } else {
+                    PyObject *head = PyUnicode_Substring(line, 0, inner - 1);
+                    if (!head) return NULL;
+                    PyObject *ell = PyUnicode_FromOrdinal(0x2026); /* U+2026 … */
+                    if (!ell) { Py_DECREF(head); return NULL; }
+                    str = PyUnicode_Concat(head, ell);
+                    Py_DECREF(head);
+                    Py_DECREF(ell);
+                    if (!str) return NULL;
+                }
+                PyObject *result = PyList_New(1);
+                if (!result) { Py_DECREF(str); return NULL; }
+                PyList_SET_ITEM(result, 0, str);
+                return result;
+            }
+        }
+
+        /* Python fallback: wrap, non-ASCII, head/middle truncation. */
+        if (!py_text_full_render) {
+            PyErr_SetString(PyExc_RuntimeError, "text full render helper not set");
+            return NULL;
+        }
+        return PyObject_CallFunction(py_text_full_render, "OiiiOO",
+            self->lines, w, self->pl, self->pr,
+            self->truncation ? self->truncation : Py_None,
+            self->wrap ? Py_True : Py_False);
+    }
+    }
+    Py_RETURN_NONE;
+}
+
+static PyTypeObject CTextRenderType = {
+    .ob_base      = PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name      = "terminal.cbuf.TextRender",
+    .tp_basicsize = sizeof(CTextRenderObject),
+    .tp_flags     = Py_TPFLAGS_DEFAULT,
+    .tp_new       = PyType_GenericNew,
+    .tp_dealloc   = (destructor)CTextRender_dealloc,
+    .tp_call      = (ternaryfunc)CTextRender_call,
+    .tp_doc       = "C-accelerated text render callable.",
+};
+
+/* ── c_make_text factory ─────────────────────────────────────────── */
+/*
+ * c_make_text(value, truncation, pl, pr, wrap) -> (TextRender, lines, visible_w)
+ */
+static PyObject *mod_c_make_text(PyObject *self, PyObject *args) {
+    PyObject *value, *truncation;
+    int pl, pr, wrap;
+
+    if (!PyArg_ParseTuple(args, "OOiip", &value, &truncation, &pl, &pr, &wrap))
+        return NULL;
+
+    /* Convert to string. */
+    PyObject *raw;
+    if (PyUnicode_Check(value)) {
+        raw = value;
+        Py_INCREF(raw);
+    } else {
+        raw = PyObject_Str(value);
+        if (!raw) return NULL;
+    }
+
+    /* _parse_lines: split on \n, compute display_width. */
+    PyObject *lines;
+    int visible_w;
+    Py_ssize_t rlen = PyUnicode_GET_LENGTH(raw);
+
+    if (PyUnicode_FindChar(raw, '\n', 0, rlen, 1) < 0) {
+        /* Single line (common case). */
+        lines = PyList_New(1);
+        if (!lines) { Py_DECREF(raw); return NULL; }
+        Py_INCREF(raw);
+        PyList_SET_ITEM(lines, 0, raw);
+        visible_w = str_display_width(raw);
+    } else {
+        /* Multi-line: split and measure each. */
+        lines = PyUnicode_Splitlines(raw, 0);
+        if (!lines) { Py_DECREF(raw); return NULL; }
+        Py_ssize_t n = PyList_GET_SIZE(lines);
+        if (n == 0) {
+            Py_DECREF(lines);
+            lines = PyList_New(1);
+            if (!lines) { Py_DECREF(raw); return NULL; }
+            PyList_SET_ITEM(lines, 0, PyUnicode_FromString(""));
+            visible_w = 0;
+        } else {
+            visible_w = 0;
+            for (Py_ssize_t i = 0; i < n; i++) {
+                int lw = str_display_width(PyList_GET_ITEM(lines, i));
+                if (lw > visible_w) visible_w = lw;
+            }
+        }
+    }
+
+    /* Determine mode. */
+    int is_trunc = (truncation != Py_None && truncation != NULL);
+    int mode;
+    if (!wrap && !is_trunc && pl == 0 && pr == 0)
+        mode = TEXT_PLAIN;
+    else if (!wrap && !is_trunc)
+        mode = TEXT_PADDED;
+    else
+        mode = TEXT_FULL;
+
+    /* Create CTextRenderObject. */
+    CTextRenderObject *render = PyObject_New(CTextRenderObject, &CTextRenderType);
+    if (!render) { Py_DECREF(lines); Py_DECREF(raw); return NULL; }
+    render->mode = mode;
+    Py_INCREF(lines);
+    render->lines = lines;
+    render->pl = pl;
+    render->pr = pr;
+    render->pad_l = pl > 0 ? make_spaces(pl) : NULL;
+    render->pad_r = pr > 0 ? make_spaces(pr) : NULL;
+    if (is_trunc) {
+        Py_INCREF(truncation);
+        render->truncation = truncation;
+    } else {
+        render->truncation = NULL;
+    }
+    render->wrap = wrap;
+
+    Py_DECREF(raw);
+    PyObject *result = Py_BuildValue("(ONi)", render, lines, visible_w);
+    return result;
+}
+
+/* ── set_text_full_render_helper ─────────────────────────────────── */
+static PyObject *mod_set_text_render_fallback(PyObject *self, PyObject *arg) {
+    Py_XDECREF(py_text_full_render);
+    Py_INCREF(arg);
+    py_text_full_render = arg;
+    Py_RETURN_NONE;
+}
+
+/* ── resolve_col_widths ────────────────────────────────────────────── */
+/*
+ * resolve_col_widths(bases, grows, width, spacing) -> list[int]
+ *
+ * bases:   list[int] — flex_basis for each column
+ * grows:   list[int] — grow weight for each column (0 = fixed)
+ * width:   int       — total available width
+ * spacing: int       — gap between columns
+ *
+ * Returns resolved column widths with remaining space distributed
+ * proportionally among grow columns.  Mirrors the Python
+ * _resolve_col_widths + distribute logic.
+ */
+static PyObject *mod_resolve_col_widths(PyObject *self, PyObject *args) {
+    PyObject *bases, *grows;
+    int width, spacing;
+    if (!PyArg_ParseTuple(args, "OOii", &bases, &grows, &width, &spacing))
+        return NULL;
+
+    Py_ssize_t n = PyList_GET_SIZE(bases);
+
+    /* Build col_widths, collect grow weights. */
+    long *col_widths = (long *)malloc(n * sizeof(long));
+    if (!col_widths) return PyErr_NoMemory();
+
+    long *grow_idx = (long *)malloc(n * sizeof(long));
+    long *grow_wt  = (long *)malloc(n * sizeof(long));
+    if (!grow_idx || !grow_wt) {
+        free(col_widths); free(grow_idx); free(grow_wt);
+        return PyErr_NoMemory();
+    }
+
+    Py_ssize_t ng = 0;
+    long used = 0;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        long b = PyLong_AsLong(PyList_GET_ITEM(bases, i));
+        long g = PyLong_AsLong(PyList_GET_ITEM(grows, i));
+        col_widths[i] = b;
+        used += b;
+        if (g) {
+            grow_idx[ng] = i;
+            grow_wt[ng]  = g;
+            ng++;
+        }
+    }
+
+    long gap_total = spacing * (n > 1 ? n - 1 : 0);
+    long remaining = width - used - gap_total;
+    if (remaining < 0) remaining = 0;
+
+    /* Distribute remaining space among grow columns. */
+    if (ng > 0 && remaining > 0) {
+        long total_weight = 0;
+        for (Py_ssize_t j = 0; j < ng; j++)
+            total_weight += grow_wt[j];
+        long cum_weight = 0, cum_space = 0;
+        for (Py_ssize_t j = 0; j < ng; j++) {
+            cum_weight += grow_wt[j];
+            long target = remaining * cum_weight / total_weight;
+            col_widths[grow_idx[j]] += target - cum_space;
+            cum_space = target;
+        }
+    }
+
+    /* Build result list. */
+    PyObject *result = PyList_New(n);
+    if (!result) { free(col_widths); free(grow_idx); free(grow_wt); return NULL; }
+    for (Py_ssize_t i = 0; i < n; i++)
+        PyList_SET_ITEM(result, i, PyLong_FromLong(col_widths[i]));
+
+    free(col_widths);
+    free(grow_idx);
+    free(grow_wt);
+    return result;
 }
 
 /* ── Module definition ─────────────────────────────────────────────── */
@@ -712,6 +1104,9 @@ static PyMethodDef module_methods[] = {
     {"display_width",  mod_display_width,  METH_O,       "Display width of a string (ANSI-aware)."},
     {"render_flat_line", mod_render_flat_line, METH_O,    "Render flat layout items into a single line."},
     {"hstack_join_row",  mod_hstack_join_row,  METH_VARARGS, "Join cells with padding and spacing."},
+    {"resolve_col_widths", mod_resolve_col_widths, METH_VARARGS, "Resolve flex column widths in one shot."},
+    {"c_make_text", mod_c_make_text, METH_VARARGS, "Create a TextRender + parse lines + measure width."},
+    {"set_text_render_fallback", mod_set_text_render_fallback, METH_O, "Set Python fallback for text full render."},
     {NULL}
 };
 
@@ -726,6 +1121,10 @@ static struct PyModuleDef module_def = {
 PyMODINIT_FUNC PyInit_cbuf(void) {
     if (PyType_Ready(&BufferType) < 0)
         return NULL;
+    if (PyType_Ready(&CRenderableType) < 0)
+        return NULL;
+    if (PyType_Ready(&CTextRenderType) < 0)
+        return NULL;
 
     PyObject *m = PyModule_Create(&module_def);
     if (!m) return NULL;
@@ -733,6 +1132,13 @@ PyMODINIT_FUNC PyInit_cbuf(void) {
     Py_INCREF(&BufferType);
     if (PyModule_AddObject(m, "Buffer", (PyObject *)&BufferType) < 0) {
         Py_DECREF(&BufferType);
+        Py_DECREF(m);
+        return NULL;
+    }
+
+    Py_INCREF(&CRenderableType);
+    if (PyModule_AddObject(m, "Renderable", (PyObject *)&CRenderableType) < 0) {
+        Py_DECREF(&CRenderableType);
         Py_DECREF(m);
         return NULL;
     }

@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import builtins
-from collections.abc import Callable
+from collections.abc import Callable, Hashable
 from typing import Generic, TypeVar
 
 from terminal.components.base import Renderable, frame
 from terminal.components.keyed import Keyed
-from terminal.components.scroll import ScrollState, fill_viewport
+from terminal.components.scroll import ScrollState
 
 T = TypeVar("T", bound=Keyed)
 
@@ -68,6 +68,19 @@ def list(
     bg: int | None = None,
     overflow: str = "visible",
 ) -> Renderable:
+    # Persists as long as the Renderable does — key → (selected, width, lines).
+    cache: dict[Hashable, tuple[bool, int, builtins.list[str]]] = {}
+
+    def render_item(i: int, w: int) -> builtins.list[str]:
+        item = state.items[i]
+        sel = i == state.cursor
+        entry = cache.get(item.key)
+        if entry is not None and entry[0] == sel and entry[1] == w:
+            return entry[2]
+        rendered = render_fn(item, sel).render(w)
+        cache[item.key] = (sel, w, rendered)
+        return rendered
+
     def render(w: int, h: int | None = None) -> builtins.list[str]:
         state.cursor = state.clamp(state.cursor)
         state.scroll.scroll_to_visible(state.cursor)
@@ -75,15 +88,20 @@ def list(
         if not isinstance(h, int) or h <= 0:
             return []
 
-        total = state.total
         state.scroll.height = h
-        state.scroll.total = total
+        state.scroll.total = state.total
         state.scroll.offset = max(0, min(state.scroll.offset, state.scroll.max_offset))
-        offset = state.scroll.offset
 
-        items = (
-            render_fn(state.items[i], i == state.cursor) for i in range(offset, total)
-        )
-        return fill_viewport(items, w, h)
+        lines: builtins.list[str] = []
+        for i in range(state.scroll.offset, state.total):
+            rendered = render_item(i, w)
+            remaining = h - len(lines)
+            if len(rendered) >= remaining:
+                lines.extend(rendered[:remaining])
+                break
+            lines.extend(rendered)
+        if len(lines) < h:
+            lines.extend([""] * (h - len(lines)))
+        return lines
 
     return frame(Renderable(render, 0, 1), width, height, grow, bg, overflow)

@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from terminal.components.base import Renderable, frame
-from terminal.components.text import Text, truncate
-from terminal.measure import display_width
+from terminal.measure import display_width, truncate
 from terminal.screen import clip_and_pad
 
 BORDERS: dict[str, tuple[str, str, str, str, str, str]] = {
@@ -20,8 +19,8 @@ def _top_border(style: str, title: str, inner: int) -> str:
     tl, tr, _, _, hz, _ = BORDERS[style]
     if not title:
         return f"{tl}{hz * inner}{tr}"
-    label = Text(truncate(title, inner - 2, ellipsis=True))
-    return f"{tl} {label} {hz * (inner - len(label) - 2)}{tr}"
+    label = truncate(title, inner - 2, ellipsis=True)
+    return f"{tl} {label} {hz * (inner - display_width(label) - 2)}{tr}"
 
 
 def box(

@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 from terminal import (
     ListState,
+    Renderable,
     ScrollState,
     box,
     hstack,
@@ -221,6 +222,30 @@ def test_large_list():
     assert elapsed < 0.002, f"list 10k x10 took {elapsed:.3f}s"
 
 
+def test_list_scroll_cached():
+    """List with 1000 items, cursor move + render x100 — mostly cached."""
+    state = ListState([_N(i) for i in range(1000)])
+
+    def render_item(item: _N, sel: bool) -> Renderable:
+        return hstack(
+            text("▸ " if sel else "  "),
+            text(f"Item {item.key}", grow=1, truncation="tail"),
+            text("✓" if item.key % 3 == 0 else " "),
+        )
+
+    # Persist the component so the cache survives across renders.
+    body = tlist(state, render_item)
+    body.render(WIDTH, HEIGHT)  # prime
+
+    def scroll_run():
+        for _ in range(100):
+            state.move(1)
+            body.render(WIDTH, HEIGHT)
+
+    elapsed = _timed(scroll_run)
+    assert elapsed < 0.003, f"list scroll cached 100 took {elapsed:.3f}s"
+
+
 def test_wide_table():
     """Table with 500 rows x 5 columns, 50 renders."""
     rows = [
@@ -366,3 +391,122 @@ def test_realistic_frame():
 
     elapsed = _timed(lambda: build().render(WIDTH, HEIGHT), iterations=100)
     assert elapsed < 0.08, f"realistic frame x100 took {elapsed:.3f}s"
+
+
+# ── Full pipeline (build → render → parse → diff) ──────────────────
+
+
+def _make_pipeline_app(items: ListState[_N]) -> tuple[Renderable, Renderable]:
+    """Build a persistent app tree. Header is rebuilt each frame (dynamic counter),
+    but the list body persists so its render cache stays warm."""
+    body = tlist(
+        items,
+        lambda item, sel: hstack(
+            text("▸ " if sel else "  "),
+            text(f"Item {item.key}", grow=1, truncation="tail"),
+            text("✓" if item.key % 3 == 0 else " "),
+        ),
+    )
+    footer = hstack(
+        text("\033[2m[j/k] move\033[0m"),
+        text("\033[2m[q] quit\033[0m"),
+        spacing=2,
+    )
+    return body, footer
+
+
+def test_full_pipeline_cold():
+    """Cold full pipeline: rebuild everything each frame, 100 frames."""
+    items = ListState([_N(i) for i in range(1000)])
+
+    def build_cold() -> list[str]:
+        header = hstack(
+            text("\033[1m✦ APP\033[0m"),
+            text(f"\033[2m{items.cursor}/1000\033[0m"),
+            justify_content="between",
+            spacing=1,
+        )
+        body = tlist(
+            items,
+            lambda item, sel: hstack(
+                text("▸ " if sel else "  "),
+                text(f"Item {item.key}", grow=1, truncation="tail"),
+                text("✓" if item.key % 3 == 0 else " "),
+            ),
+        )
+        footer = hstack(
+            text("\033[2m[j/k] move\033[0m"), text("\033[2m[q] quit\033[0m"), spacing=2
+        )
+        return vstack(header, body, footer, spacing=1).render(WIDTH, HEIGHT)
+
+    prev = Buffer(WIDTH, HEIGHT)
+    for i, l in enumerate(build_cold()[:HEIGHT]):
+        parse_line(prev, i, l)
+
+    def run():
+        nonlocal prev
+        for _ in range(100):
+            items.move(1)
+            lines = build_cold()
+            buf = Buffer(WIDTH, HEIGHT)
+            for i, l in enumerate(lines[:HEIGHT]):
+                parse_line(buf, i, l)
+            render_diff(buf, prev)
+            prev = buf
+
+    elapsed = _timed(run)
+    assert elapsed < 0.03, f"cold pipeline 100 took {elapsed:.3f}s"
+
+
+def test_full_pipeline_warm():
+    """Warm full pipeline: persistent list body (cached), 100 frames."""
+    items = ListState([_N(i) for i in range(1000)])
+    body, footer = _make_pipeline_app(items)
+
+    def build_warm() -> list[str]:
+        header = hstack(
+            text("\033[1m✦ APP\033[0m"),
+            text(f"\033[2m{items.cursor}/1000\033[0m"),
+            justify_content="between",
+            spacing=1,
+        )
+        return vstack(header, body, footer, spacing=1).render(WIDTH, HEIGHT)
+
+    build_warm()  # prime cache
+    prev = Buffer(WIDTH, HEIGHT)
+    for i, l in enumerate(build_warm()[:HEIGHT]):
+        parse_line(prev, i, l)
+
+    def run():
+        nonlocal prev
+        for _ in range(100):
+            items.move(1)
+            lines = build_warm()
+            buf = Buffer(WIDTH, HEIGHT)
+            for i, l in enumerate(lines[:HEIGHT]):
+                parse_line(buf, i, l)
+            render_diff(buf, prev)
+            prev = buf
+
+    elapsed = _timed(run)
+    assert elapsed < 0.006, f"warm pipeline 100 took {elapsed:.3f}s"
+
+
+def test_text_hstack_build_and_render():
+    """Build + render 200 text-hstacks x50 (guards c_make_text + content extraction)."""
+
+    def run():
+        for _ in range(50):
+            rows = [
+                hstack(
+                    text(f"a{i}"),
+                    text(f"name-{i}", grow=1, truncation="tail"),
+                    text(f"z{i}"),
+                    spacing=1,
+                )
+                for i in range(200)
+            ]
+            vstack(*rows).render(WIDTH, HEIGHT * 4)
+
+    elapsed = _timed(run)
+    assert elapsed < 0.08, f"text hstack build+render 200 x50 took {elapsed:.3f}s"

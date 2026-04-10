@@ -1,6 +1,9 @@
 """Renderable dataclass and layout helpers.
 
 ``Renderable`` is the core type — a render function plus flex properties.
+Implemented as a C extension type (terminal.cbuf.Renderable) for fast
+creation and attribute access.
+
 ``frame`` wraps a Renderable with size constraints and background.
 
 Accepted size values (width / height):
@@ -16,50 +19,17 @@ how remaining space is distributed among siblings in a flex container.
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
 
-RenderFn = Callable[..., list[str]]
-
-
-class Renderable:
-    # __slots__ over dataclass: avoids __dict__ + descriptor overhead on a hot object.
-    __slots__ = ("render", "flex_basis", "grow", "width", "height")
-
-    def __init__(
-        self,
-        render: RenderFn,
-        flex_basis: int = 0,
-        grow: int = 0,
-        width: str | None = None,
-        height: str | None = None,
-    ) -> None:
-        self.render = render
-        self.flex_basis = flex_basis
-        self.grow = grow
-        self.width = width
-        self.height = height
-
-    def resolve_width(self, parent: int) -> int | None:
-        """Resolve width spec against *parent* width. None if unspecified."""
-        return _resolve(self.width, parent, 0)
-
-    def resolve_height(self, parent: int) -> int | None:
-        """Resolve height spec against *parent* height. None if unspecified."""
-        return _resolve(self.height, parent, 1)
-
-
-_OVERFLOW = {"visible", "hidden"}
+from terminal.buffer import Renderable
 
 
 def _clip_overflow(lines: list[str], width: int) -> list[str]:
-    """Clip lines to width."""
     from terminal.screen import clip_and_pad
 
     return [clip_and_pad(l, width) for l in lines]
 
 
 def _fit_height(lines: list[str], h: int, clips: bool) -> list[str]:
-    """Truncate or pad lines to exactly h rows."""
     if clips and len(lines) > h:
         return lines[:h]
     if len(lines) < h:
@@ -76,15 +46,18 @@ def frame(
     overflow: str = "visible",
 ) -> Renderable:
     """Wrap *child* with size constraints and/or background."""
-    if overflow not in _OVERFLOW:
+    if overflow not in ("visible", "hidden"):
         raise ValueError(f"unknown overflow {overflow!r}")
     if width is None and height is None and bg is None and overflow == "visible":
         if grow is None:
             return child
         return Renderable(child.render, child.flex_basis, grow)
 
-    fw = _fixed(width)
-    basis = fw if fw is not None else child.flex_basis
+    basis = (
+        int(width)
+        if width is not None and not width.endswith("%")
+        else child.flex_basis
+    )
     r_grow = grow if grow is not None else child.grow
     clips = overflow != "visible"
 
@@ -123,10 +96,4 @@ def _resolve(value: str | None, parent: int | None, axis: int) -> int | None:
     if value.endswith("%"):
         base = parent if parent is not None else os.get_terminal_size()[axis]
         return base * int(value[:-1]) // 100
-    return int(value)
-
-
-def _fixed(value: str | None) -> int | None:
-    if value is None or value.endswith("%"):
-        return None
     return int(value)

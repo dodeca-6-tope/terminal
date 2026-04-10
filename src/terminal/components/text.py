@@ -1,19 +1,10 @@
-"""ANSI-aware text — a string that doubles as a display component."""
+"""Text component — renders strings with optional truncation, wrap, padding."""
 
 from __future__ import annotations
 
+from terminal.buffer import c_make_text, set_text_render_fallback
 from terminal.components.base import Renderable, frame
 from terminal.measure import display_width, slice_at_width, strip_ansi
-
-
-def truncate(s: str, max_width: int, ellipsis: bool = False) -> str:
-    """Truncate a string to max_width visible characters."""
-    stripped = strip_ansi(s)
-    if display_width(stripped) <= max_width:
-        return s
-    if ellipsis:
-        return slice_at_width(stripped, max_width - 1) + "…"
-    return slice_at_width(stripped, max_width)
 
 
 def _wrap_line(line: str, width: int) -> list[str]:
@@ -61,51 +52,28 @@ def _truncate_line(line: str, width: int, mode: str) -> str:
     return slice_at_width(stripped, width - 1) + "…"
 
 
-class Text:
-    """ANSI-aware string helper — measures visible width, supports padding."""
-
-    __slots__ = ("_raw", "_visible")
-
-    def __init__(self, value: object = "") -> None:
-        raw = str(value)
-        self._raw = raw
-        self._visible = display_width(raw)  # C display_width already skips ANSI
-
-    def __len__(self) -> int:
-        return self._visible
-
-    def __str__(self) -> str:
-        return self._raw
-
-    def __repr__(self) -> str:
-        return f"Text({self._raw!r})"
-
-    def __add__(self, other: object) -> Text:
-        return Text(self._raw + str(other))
-
-    def __radd__(self, other: object) -> Text:
-        return Text(str(other) + self._raw)
-
-    def __format__(self, format_spec: str) -> str:
-        return self._raw.__format__(format_spec)
-
-    def pad(self, width: int, align: str = "left") -> Text:
-        gap = width - self._visible
-        if gap <= 0:
-            return self
-        spaces = " " * gap
-        if align == "left":
-            return Text(self._raw + spaces)
-        return Text(spaces + self._raw)
+def _text_full_render(
+    lines: list[str], w: int, pl: int, pr: int, truncation: str | None, wrap: bool
+) -> list[str]:
+    """Full render path for text with wrap/truncation — Python fallback for C."""
+    inner = w - pl - pr
+    chunks: list[str] = []
+    for line in lines:
+        if wrap and inner > 0:
+            chunks.extend(_wrap_line(line, inner))
+        elif truncation and inner > 0:
+            chunks.append(_truncate_line(line, inner, truncation))
+        else:
+            chunks.append(line)
+    if not pl and not pr:
+        return chunks
+    pad_l = " " * pl
+    pad_r = " " * pr
+    return [f"{pad_l}{c}{pad_r}" for c in chunks]
 
 
-def _parse_lines(value: object) -> tuple[list[str], int]:
-    """Parse value into lines and compute the max display width."""
-    raw = value if isinstance(value, str) else str(value)
-    if "\n" not in raw:
-        return [raw], display_width(raw)
-    lines = raw.splitlines() or [""]
-    return lines, max(display_width(l) for l in lines)
+# Register the Python fallback so CTextRender can call it for wrap/non-ASCII.
+set_text_render_fallback(_text_full_render)
 
 
 def text(
@@ -122,42 +90,12 @@ def text(
     bg: int | None = None,
     overflow: str = "visible",
 ) -> Renderable:
-    lines, visible_w = _parse_lines(value)
     pl = padding if padding_left is None else padding_left
     pr = padding if padding_right is None else padding_right
+
+    # C: parse + display_width + TextRender creation in one call.
+    render, _, visible_w = c_make_text(value, truncation, pl, pr, wrap)
     basis = visible_w + pl + pr
-
-    # Branch at build time so the per-frame render avoids feature checks.
-    if not wrap and not truncation and not pl and not pr:
-
-        def render(w: int, h: int | None = None) -> list[str]:
-            return lines
-
-    elif not wrap and not truncation:
-        pad_l = " " * pl
-        pad_r = " " * pr
-
-        def render(w: int, h: int | None = None) -> list[str]:
-            return [f"{pad_l}{c}{pad_r}" for c in lines]
-
-    else:
-        mode = truncation
-        pad_l = " " * pl
-        pad_r = " " * pr
-
-        def render(w: int, h: int | None = None) -> list[str]:
-            inner = w - pl - pr
-            chunks: list[str] = []
-            for line in lines:
-                if wrap and inner > 0:
-                    chunks.extend(_wrap_line(line, inner))
-                elif mode and inner > 0:
-                    chunks.append(_truncate_line(line, inner, mode))
-                else:
-                    chunks.append(line)
-            if not pl and not pr:
-                return chunks
-            return [f"{pad_l}{c}{pad_r}" for c in chunks]
 
     # Skip frame() indirection when no constraints — avoids an extra Renderable.
     if width is None and height is None and bg is None and overflow == "visible":

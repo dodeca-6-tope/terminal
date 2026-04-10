@@ -11,7 +11,7 @@ Three render tiers (cheapest first):
 
 from __future__ import annotations
 
-from terminal.buffer import hstack_join_row, render_flat_line
+from terminal.buffer import hstack_join_row, render_flat_line, resolve_col_widths
 from terminal.components.base import Renderable, frame
 from terminal.measure import display_width, distribute
 from terminal.screen import pad
@@ -69,24 +69,18 @@ def _justify_row(cells: list[str], remaining: int, spacing: int, mode: str) -> s
 def _resolve_col_widths(
     act: list[Renderable], w: int, spacing: int
 ) -> tuple[list[int], int]:
-    """Resolve column widths and leftover space for flex-grow distribution.
-
-    Index loop + local caching over enumerate/comprehensions — called per
-    frame per hstack, overhead adds up at 60 fps.
-    """
+    """Resolve column widths for children with explicit width specs."""
     n = len(act)
     col_widths = [0] * n
     weights: list[tuple[int, int]] = []
     for i in range(n):
         c = act[i]
-        cw = c.width
-        if cw is not None:
+        if c.width is not None:
             col_widths[i] = c.resolve_width(w) or c.flex_basis
         else:
             col_widths[i] = c.flex_basis
-            g = c.grow
-            if g:
-                weights.append((i, g))
+            if c.grow:
+                weights.append((i, c.grow))
     remaining = max(0, w - sum(col_widths) - spacing * max(0, n - 1))
     if weights:
         for (i, _), extra in zip(
@@ -97,15 +91,26 @@ def _resolve_col_widths(
     return col_widths, remaining
 
 
-def _render_columns(
-    act: list[Renderable], col_widths: list[int], w: int, h: int | None
-) -> list[list[str]]:
-    """Render each child at its resolved column width."""
-    columns: list[list[str]] = []
-    for i, c in enumerate(act):
-        cw = w if c.width is not None else col_widths[i]
-        columns.append(c.render(cw, h) if c.grow else c.render(cw))
-    return columns
+def _join_rows(
+    columns: list[list[str]],
+    col_widths: list[int],
+    remaining: int,
+    spacing: int,
+    justify: str,
+    align: str,
+) -> list[str]:
+    """General multi-row join: align cells, pad, join with spacing."""
+    max_rows = max((len(col) for col in columns), default=0)
+    fast = remaining <= 0 and justify == "start"
+    lines: list[str] = []
+    for row in range(max_rows):
+        cells = [_aligned_cell(col, row, max_rows, align) for col in columns]
+        if fast:
+            lines.append(hstack_join_row(cells, col_widths, spacing))
+        else:
+            padded = [pad(cells[i], col_widths[i]) for i in range(len(cells))]
+            lines.append(_justify_row(padded, remaining, spacing, justify))
+    return lines
 
 
 # ── Flat layout helpers ──────────────────────────────────────────────
@@ -129,11 +134,11 @@ def _try_flatten(
             c = nodes[i]
             if i > 0 and sp:
                 x += sp
-            flat = getattr(c.render, "flat_children", None)
+            flat = c.flat_children
             if flat is not None:
                 # Save remaining siblings, then descend into the flat subtree
                 stack.append((nodes, i + 1, x, sp))
-                stack.append((flat, 0, x, getattr(c.render, "flat_spacing", 0)))
+                stack.append((flat, 0, x, c.flat_spacing))
                 break
             if c.grow or c.width is not None:
                 return None
@@ -164,7 +169,6 @@ def hstack(
         raise ValueError(f"unknown justify_content {justify_content!r}")
     if align_items not in _ALIGN_ITEMS:
         raise ValueError(f"unknown align_items {align_items!r}")
-    # Single pass: filter active children, detect grow.
     act: list[Renderable] = []
     has_grow = False
     basis = 0
@@ -175,10 +179,12 @@ def hstack(
         basis += c.flex_basis
         if c.grow:
             has_grow = True
-
     basis += spacing * max(0, len(act) - 1)
 
-    # ── Flat path (see module docstring, tier 1) ─────────────────────
+    # ── Flat path ────────────────────────────────────────────────────
+    # Collapses nested fixed-width hstacks into absolute offsets, then
+    # hands the list to a C function (render_flat_line) that writes all
+    # items in one memcpy pass.  Falls back to Python for non-ASCII.
     if (
         not has_grow
         and not wrap
@@ -187,35 +193,39 @@ def hstack(
     ):
         flat = _try_flatten(children, spacing)
         if flat is not None:
+            # Pre-render every leaf at build time — content is fixed.
             flat_items: list[tuple[int, int, str]] = [
                 (off, cw, child.render(cw)[0]) for off, cw, child in flat
             ]
 
             def render_flat(w: int, h: int | None = None) -> list[str]:
-                line = render_flat_line(flat_items)  # None → non-ASCII/ANSI, fall back
-                if line is None:
-                    parts: list[str] = []
-                    pos = 0
-                    for off, cw, content in flat_items:
-                        if off > pos:
-                            parts.append(" " * (off - pos))
-                        parts.append(content)
-                        gap = cw - display_width(content)
-                        if gap > 0:
-                            parts.append(" " * gap)
-                        pos = off + cw
-                    return ["".join(parts)]
-                return [line]
+                # C fast path: returns None when content isn't pure ASCII.
+                line = render_flat_line(flat_items)
+                if line is not None:
+                    return [line]
+                # Python fallback for ANSI / wide-char content.
+                parts: list[str] = []
+                pos = 0
+                for off, cw, content in flat_items:
+                    if off > pos:
+                        parts.append(" " * (off - pos))
+                    parts.append(content)
+                    gap = cw - display_width(content)
+                    if gap > 0:
+                        parts.append(" " * gap)
+                    pos = off + cw
+                return ["".join(parts)]
 
-            # Expose tree structure so a parent hstack's _try_flatten can
-            # see through this node and collapse it into the flat list.
-            render_flat.flat_children = children  # type: ignore[attr-defined]
-            render_flat.flat_spacing = spacing  # type: ignore[attr-defined]
-            return frame(
-                Renderable(render_flat, basis), width, height, grow, bg, overflow
-            )
+            r = frame(Renderable(render_flat, basis), width, height, grow, bg, overflow)
+            # Stored on the Renderable so a parent hstack's _try_flatten
+            # can see through this node and collapse it further.
+            r.flat_children = children
+            r.flat_spacing = spacing
+            return r
 
     # ── Standard path ────────────────────────────────────────────────
+    # Three build-time branches — each creates a different render
+    # closure so per-frame code never checks which features are active.
 
     if wrap:
 
@@ -225,30 +235,70 @@ def hstack(
             strs = [" ".join(c.render(w)) for c in children]
             return _wrap_chunks(strs, w, spacing)
 
-    else:
+    elif any(c.width is not None for c in act):
+        # Children with explicit width specs (e.g. "50%") need the
+        # Python _resolve_col_widths which calls c.resolve_width().
 
         def render(w: int, h: int | None = None) -> list[str]:
             if not act:
                 return [""] * h if h else [""]
-
             col_widths, remaining = _resolve_col_widths(act, w, spacing)
-            columns = _render_columns(act, col_widths, w, h)
-            max_rows = max((len(col) for col in columns), default=0)
-            # No leftover space + start-justify → skip Python padding, use C path (tier 2).
-            fast = remaining <= 0 and justify_content == "start"
+            columns = [
+                c.render(w if c.width is not None else col_widths[i], h)
+                if c.grow
+                else c.render(w if c.width is not None else col_widths[i])
+                for i, c in enumerate(act)
+            ]
+            return _join_rows(
+                columns,
+                col_widths,
+                remaining,
+                spacing,
+                justify_content,
+                align_items,
+            )
 
-            lines: list[str] = []
-            for row in range(max_rows):
-                cells = [
-                    _aligned_cell(col, row, max_rows, align_items) for col in columns
-                ]
-                if fast:
-                    lines.append(hstack_join_row(cells, col_widths, spacing))
-                else:
-                    padded = [pad(cells[i], col_widths[i]) for i in range(len(cells))]
-                    lines.append(
-                        _justify_row(padded, remaining, spacing, justify_content)
+    else:
+        # Hot path (most list items land here): all children use
+        # flex_basis/grow, no explicit widths.  Pre-compute the flex
+        # metadata once so the per-frame render just passes two lists
+        # to the C resolve_col_widths function.
+        bases_list = [c.flex_basis for c in act]
+        grows_list = [c.grow for c in act]
+        start_justify = justify_content == "start" and align_items == "start"
+
+        def render(w: int, h: int | None = None) -> list[str]:
+            if not act:
+                return [""] * h if h else [""]
+            # C function: resolves flex distribution in one call.
+            col_widths = resolve_col_widths(bases_list, grows_list, w, spacing)
+            columns = [
+                c.render(col_widths[i], h) if c.grow else c.render(col_widths[i])
+                for i, c in enumerate(act)
+            ]
+            # When every child produces one line (the common case for
+            # list rows), skip the alignment + row loop entirely and
+            # hand the strings straight to the C join function.
+            if start_justify and all(len(col) == 1 for col in columns):
+                return [
+                    hstack_join_row(
+                        [col[0] for col in columns],
+                        col_widths,
+                        spacing,
                     )
-            return lines
+                ]
+            remaining = (
+                0
+                if has_grow
+                else max(0, w - sum(col_widths) - spacing * max(0, len(act) - 1))
+            )
+            return _join_rows(
+                columns,
+                col_widths,
+                remaining,
+                spacing,
+                justify_content,
+                align_items,
+            )
 
     return frame(Renderable(render, basis), width, height, grow, bg, overflow)

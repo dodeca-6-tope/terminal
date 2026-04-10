@@ -2,9 +2,8 @@
 
 from helpers import vis
 
-from terminal import Text, box, text
-from terminal.components.text import truncate
-from terminal.measure import strip_ansi
+from terminal import box, text
+from terminal.measure import display_width, strip_ansi, truncate
 
 # ── Render ───────────────────────────────────────────────────────────
 
@@ -182,27 +181,17 @@ def test_flex_grow_with_100pct_width():
 # ── Display width ────────────────────────────────────────────────────
 
 
-def test_display_width():
-    assert len(Text("hello")) == 5
-    assert len(Text("\033[1mhello\033[0m")) == 5
-    assert len(Text("")) == 0
-    assert len(Text("日本")) == 4
+def test_display_width_plain():
+    assert display_width("hello") == 5
+    assert display_width("") == 0
 
 
-# ── Pad ──────────────────────────────────────────────────────────────
+def test_display_width_ansi():
+    assert display_width("\033[1mhello\033[0m") == 5
 
 
-def test_pad():
-    assert str(Text("hi").pad(5)) == "hi   "
-    assert str(Text("hi").pad(5, align="right")) == "   hi"
-    t = Text("hello")
-    assert t.pad(3) is t
-
-
-def test_pad_ansi():
-    padded = Text("\033[1mhi\033[0m").pad(5)
-    assert len(padded) == 5
-    assert str(padded) == "\033[1mhi\033[0m   "
+def test_display_width_wide():
+    assert display_width("日本") == 4
 
 
 # ── Truncate (standalone function) ───────────────────────────────────
@@ -235,26 +224,3 @@ def test_truncate_wide_chars_ellipsis():
 
 def test_truncate_wide_chars_no_op():
     assert truncate("你好", 4) == "你好"
-
-
-# ── Concatenation ────────────────────────────────────────────────────
-
-
-def test_concatenation():
-    result = Text("hello") + Text(" world")
-    assert str(result) == "hello world"
-    assert len(result) == 11
-    assert str(Text("hello") + " world") == "hello world"
-    assert str("hello " + Text("world")) == "hello world"
-
-
-def test_str_representation():
-    raw = "\033[32mgreen\033[0m"
-    assert str(Text(raw)) == raw
-    assert f"[{Text('hi').pad(5)}]" == "[hi   ]"
-
-
-def test_chaining():
-    result = Text(truncate("a very long name here", 10)).pad(15)
-    assert len(result) == 15
-    assert str(result) == "a very lon     "

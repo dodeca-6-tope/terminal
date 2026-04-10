@@ -1,4 +1,28 @@
+from collections.abc import Callable
+from typing import Any, TypeAlias
+
 EMPTY: int
+
+RenderFn: TypeAlias = Callable[..., list[str]]
+
+class Renderable:
+    render: RenderFn
+    flex_basis: int
+    grow: int
+    width: str | None
+    height: str | None
+    flat_children: tuple[Any, ...] | None
+    flat_spacing: int
+    def __init__(
+        self,
+        render: RenderFn,
+        flex_basis: int = 0,
+        grow: int = 0,
+        width: str | None = None,
+        height: str | None = None,
+    ) -> None: ...
+    def resolve_width(self, parent: int) -> int | None: ...
+    def resolve_height(self, parent: int) -> int | None: ...
 
 class Buffer:
     width: int
@@ -13,3 +37,14 @@ def char_width(ch: str) -> int: ...
 def display_width(s: str) -> int: ...
 def render_flat_line(items: list[tuple[int, int, str]]) -> str | None: ...
 def hstack_join_row(cells: list[str], col_widths: list[int], spacing: int) -> str: ...
+def resolve_col_widths(
+    bases: list[int], grows: list[int], width: int, spacing: int
+) -> list[int]: ...
+def c_make_text(
+    value: object,
+    truncation: str | None,
+    pl: int,
+    pr: int,
+    wrap: bool,
+) -> tuple[RenderFn, list[str], int]: ...
+def set_text_render_fallback(fn: Callable[..., list[str]]) -> None: ...

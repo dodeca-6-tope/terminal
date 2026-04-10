@@ -45,7 +45,7 @@ def _resolve_flex_heights(
 def _virtualize(
     children: tuple[Renderable, ...], w: int, h: int, spacing: int
 ) -> list[str]:
-    """Render children until the viewport is full (no flex)."""
+    """Render children until the viewport is full, then stop early."""
     lines: list[str] = []
     for i, child in enumerate(children):
         remaining = h - len(lines)
@@ -72,6 +72,7 @@ def vstack(
     overflow: str = "visible",
 ) -> Renderable:
     basis = max((c.flex_basis for c in children), default=0)
+    # Build-time check: skip flex allocation when no child uses grow/height.
     has_flex = any(c.grow or c.height is not None for c in children)
 
     def join(parts: list[list[str]]) -> list[str]:
