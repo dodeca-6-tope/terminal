@@ -1,7 +1,8 @@
 """Stress tests — ensure hot paths stay fast at scale.
 
-Budgets are ~5x measured times: tight enough to catch regressions,
-loose enough to not flake on CI.
+Budgets are ~3x measured times (~5x for sub-ms measurements where
+variance is highest): tight enough to catch regressions, loose enough
+to not flake on CI.
 """
 
 import time
@@ -50,14 +51,14 @@ def test_clip_throughput():
     """clip() on 10k lines with ANSI + wide chars."""
     lines = [f"\033[1m{'あ' * 100}hello world\033[0m"] * 10_000
     elapsed = _timed(lambda: [clip(l, WIDTH) for l in lines])
-    assert elapsed < 0.5, f"clip wide 10k took {elapsed:.3f}s"
+    assert elapsed < 0.35, f"clip wide 10k took {elapsed:.3f}s"
 
 
 def test_pad_throughput():
     """pad() on 10k ASCII lines."""
     lines = ["hello world"] * 10_000
     elapsed = _timed(lambda: [pad(l, WIDTH) for l in lines])
-    assert elapsed < 0.01, f"pad ASCII 10k took {elapsed:.3f}s"
+    assert elapsed < 0.005, f"pad ASCII 10k took {elapsed:.3f}s"
 
 
 # ── clip_and_pad (main render loop) ────────────────────────────────
@@ -67,28 +68,28 @@ def test_clip_and_pad_ascii_already_fit():
     """Lines already at target width — should be near-instant."""
     lines = ["x" * WIDTH] * 10_000
     elapsed = _timed(lambda: [clip_and_pad(l, WIDTH) for l in lines])
-    assert elapsed < 0.01, f"clip_and_pad exact-fit 10k took {elapsed:.3f}s"
+    assert elapsed < 0.003, f"clip_and_pad exact-fit 10k took {elapsed:.3f}s"
 
 
 def test_clip_and_pad_ansi_already_fit():
     """ANSI lines already at target width — single scan, no double pass."""
     lines = [f"\033[1m{'a' * 196}\033[0m"] * 10_000
     elapsed = _timed(lambda: [clip_and_pad(l, WIDTH) for l in lines])
-    assert elapsed < 0.5, f"clip_and_pad ANSI fit 10k took {elapsed:.3f}s"
+    assert elapsed < 0.4, f"clip_and_pad ANSI fit 10k took {elapsed:.3f}s"
 
 
 def test_clip_and_pad_needs_clip():
     """Lines wider than target — must clip."""
     lines = ["x" * 400] * 10_000
     elapsed = _timed(lambda: [clip_and_pad(l, WIDTH) for l in lines])
-    assert elapsed < 0.01, f"clip_and_pad needs-clip 10k took {elapsed:.3f}s"
+    assert elapsed < 0.005, f"clip_and_pad needs-clip 10k took {elapsed:.3f}s"
 
 
 def test_clip_and_pad_needs_pad():
     """Short lines that need padding."""
     lines = ["hello"] * 10_000
     elapsed = _timed(lambda: [clip_and_pad(l, WIDTH) for l in lines])
-    assert elapsed < 0.01, f"clip_and_pad needs-pad 10k took {elapsed:.3f}s"
+    assert elapsed < 0.005, f"clip_and_pad needs-pad 10k took {elapsed:.3f}s"
 
 
 # ── display_width ───────────────────────────────────────────────────
@@ -98,14 +99,14 @@ def test_display_width_wide_throughput():
     """display_width on 10k strings with ANSI + wide chars."""
     strings = [f"\033[31m{'你好' * 20}abc\033[0m"] * 10_000
     elapsed = _timed(lambda: [display_width(s) for s in strings])
-    assert elapsed < 0.12, f"display_width wide 10k took {elapsed:.3f}s"
+    assert elapsed < 0.003, f"display_width wide 10k took {elapsed:.3f}s"
 
 
 def test_display_width_ascii_throughput():
     """display_width on 100k ASCII strings — fast path."""
     strings = ["hello world this is a normal line"] * 100_000
     elapsed = _timed(lambda: [display_width(s) for s in strings])
-    assert elapsed < 0.04, f"display_width ASCII 100k took {elapsed:.3f}s"
+    assert elapsed < 0.02, f"display_width ASCII 100k took {elapsed:.3f}s"
 
 
 # ── cell buffer: speed ─────────────────────────────────────────────
@@ -119,7 +120,7 @@ def test_diff_identical_frames():
         parse_line(a, i, "x" * WIDTH)
         parse_line(b, i, "x" * WIDTH)
     elapsed = _timed(lambda: render_diff(a, b), iterations=1000)
-    assert elapsed < 0.02, f"diff identical 1k took {elapsed:.3f}s"
+    assert elapsed < 0.008, f"diff identical 1k took {elapsed:.3f}s"
 
 
 def test_diff_fully_changed():
@@ -130,7 +131,7 @@ def test_diff_fully_changed():
         parse_line(old, i, "a" * WIDTH)
         parse_line(new, i, "b" * WIDTH)
     elapsed = _timed(lambda: render_diff(new, old), iterations=100)
-    assert elapsed < 0.04, f"diff changed 100 took {elapsed:.3f}s"
+    assert elapsed < 0.015, f"diff changed 100 took {elapsed:.3f}s"
 
 
 def test_parse_line_ascii_throughput():
@@ -143,7 +144,7 @@ def test_parse_line_ascii_throughput():
             parse_line(buf, i, l)
 
     elapsed = _timed(run, iterations=1000)
-    assert elapsed < 0.04, f"parse ASCII 1k frames took {elapsed:.3f}s"
+    assert elapsed < 0.015, f"parse ASCII 1k frames took {elapsed:.3f}s"
 
 
 def test_parse_line_ansi_throughput():
@@ -156,7 +157,7 @@ def test_parse_line_ansi_throughput():
             parse_line(buf, i, l)
 
     elapsed = _timed(run, iterations=1000)
-    assert elapsed < 0.1, f"parse ANSI 1k frames took {elapsed:.3f}s"
+    assert elapsed < 0.04, f"parse ANSI 1k frames took {elapsed:.3f}s"
 
 
 # ── cell buffer: output size ──────────────────────────────────────
@@ -205,7 +206,7 @@ def test_large_vstack():
     children = [text(f"line {i}") for i in range(1000)]
     tree = vstack(*children)
     elapsed = _timed(lambda: tree.render(WIDTH, HEIGHT), iterations=100)
-    assert elapsed < 0.15, f"vstack 1000 x100 took {elapsed:.3f}s"
+    assert elapsed < 0.002, f"vstack 1000 x100 took {elapsed:.3f}s"
 
 
 def test_large_list():
@@ -217,7 +218,7 @@ def test_large_list():
         ),
         iterations=10,
     )
-    assert elapsed < 0.01, f"list 10k x10 took {elapsed:.3f}s"
+    assert elapsed < 0.002, f"list 10k x10 took {elapsed:.3f}s"
 
 
 def test_wide_table():
@@ -234,7 +235,7 @@ def test_wide_table():
     ]
     tree = table(*rows)
     elapsed = _timed(lambda: tree.render(WIDTH), iterations=50)
-    assert elapsed < 0.3, f"table 500x5 x50 took {elapsed:.3f}s"
+    assert elapsed < 0.1, f"table 500x5 x50 took {elapsed:.3f}s"
 
 
 def test_nested_hstack():
@@ -247,7 +248,7 @@ def test_nested_hstack():
 
     tree = build(5)
     elapsed = _timed(lambda: tree.render(WIDTH), iterations=10)
-    assert elapsed < 0.15, f"nested hstack x10 took {elapsed:.3f}s"
+    assert elapsed < 0.002, f"nested hstack x10 took {elapsed:.3f}s"
 
 
 # ── ZStack ──────────────────────────────────────────────────────────
@@ -259,7 +260,7 @@ def test_zstack_large_overlay():
     overlay = box(text("Alert! " * 10), padding=1)
     tree = zstack(base, overlay, justify_content="center", align_items="center")
     elapsed = _timed(lambda: tree.render(WIDTH, HEIGHT), iterations=100)
-    assert elapsed < 0.06, f"zstack overlay x100 took {elapsed:.3f}s"
+    assert elapsed < 0.015, f"zstack overlay x100 took {elapsed:.3f}s"
 
 
 def test_zstack_wide_chars():
@@ -268,7 +269,7 @@ def test_zstack_wide_chars():
     overlay = text("ALERT")
     tree = zstack(base, overlay, justify_content="center", align_items="center")
     elapsed = _timed(lambda: tree.render(WIDTH, HEIGHT), iterations=100)
-    assert elapsed < 0.3, f"zstack wide x100 took {elapsed:.3f}s"
+    assert elapsed < 0.01, f"zstack wide x100 took {elapsed:.3f}s"
 
 
 # ── Scroll ──────────────────────────────────────────────────────────
@@ -281,7 +282,7 @@ def test_scroll_large_content():
     children = [text(f"line {i}") for i in range(10_000)]
     tree = scroll(*children, state=state)
     elapsed = _timed(lambda: tree.render(WIDTH, HEIGHT), iterations=100)
-    assert elapsed < 0.01, f"scroll 10k x100 took {elapsed:.3f}s"
+    assert elapsed < 0.005, f"scroll 10k x100 took {elapsed:.3f}s"
 
 
 # ── Realistic full app frame ────────────────────────────────────────
@@ -314,4 +315,4 @@ def test_realistic_frame():
         return vstack(header, body, footer, spacing=1)
 
     elapsed = _timed(lambda: build().render(WIDTH, HEIGHT), iterations=100)
-    assert elapsed < 0.2, f"realistic frame x100 took {elapsed:.3f}s"
+    assert elapsed < 0.08, f"realistic frame x100 took {elapsed:.3f}s"

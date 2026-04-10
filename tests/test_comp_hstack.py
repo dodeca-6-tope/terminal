@@ -203,6 +203,7 @@ def test_hstack_in_vstack_scroll_gets_remaining_height():
 
 def test_bg_fills_flex_allocated_height():
     from helpers import clean
+
     from terminal import spacer
 
     v = vstack(
