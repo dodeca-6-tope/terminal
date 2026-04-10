@@ -215,3 +215,31 @@ def test_full_render_styled_roundtrip():
     result = render_full(buf)
     assert "hello" in result
     assert ";1" in result  # bold attribute present
+
+
+# ── hstack_join_row ANSI clipping ───────────────────────────────────
+
+
+def test_hstack_join_row_ansi_clips_overflow():
+    from terminal.buffer import hstack_join_row
+    from terminal.measure import display_width, strip_ansi
+
+    ansi_content = "\033[1mhello world\033[0m"  # 11 visible chars
+    result = hstack_join_row([ansi_content], [5], 0)
+    visible = display_width(strip_ansi(result))
+    assert visible <= 5, (
+        f"ANSI content overflowed col_width: visible={visible}, expected<=5"
+    )
+
+
+def test_hstack_join_row_ansi_ascii_width_agree():
+    from terminal.buffer import hstack_join_row
+    from terminal.measure import display_width, strip_ansi
+
+    ascii_result = hstack_join_row(["hello world"], [5], 0)
+    ansi_result = hstack_join_row(["\033[1mhello world\033[0m"], [5], 0)
+    ascii_w = display_width(strip_ansi(ascii_result))
+    ansi_w = display_width(strip_ansi(ansi_result))
+    assert ascii_w == ansi_w, (
+        f"ASCII path width={ascii_w}, ANSI path width={ansi_w}"
+    )

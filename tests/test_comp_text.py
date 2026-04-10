@@ -232,3 +232,35 @@ def test_truncate_wide_chars_ellipsis():
 
 def test_truncate_wide_chars_no_op():
     assert truncate("你好", 4) == "你好"
+
+
+# ── Tail truncation + padding (C fast path) ─────────────────────────
+
+
+def test_tail_truncation_with_padding():
+    from helpers import vis
+
+    t = text("hello world", truncation="tail", padding=2)
+    assert vis(t.render(15)) == ["··hello·world··"]
+
+
+def test_tail_truncation_with_padding_truncates():
+    from helpers import vis
+
+    t = text("hello world!!!!", truncation="tail", padding=2)
+    result = vis(t.render(15))
+    assert result[0].startswith("··"), f"missing left padding: {result}"
+    assert result[0].endswith("··"), f"missing right padding: {result}"
+
+
+def test_tail_truncation_padding_c_matches_python():
+    from helpers import vis
+
+    py_result = vis(text("こんにちは世界テスト", truncation="tail", padding=2).render(20))
+    c_result = vis(text("hello world test!!", truncation="tail", padding=2).render(20))
+    assert c_result[0].startswith("··"), (
+        f"C path missing left padding: {c_result} vs Python: {py_result}"
+    )
+    assert c_result[0].endswith("··"), (
+        f"C path missing right padding: {c_result} vs Python: {py_result}"
+    )

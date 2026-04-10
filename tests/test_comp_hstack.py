@@ -212,3 +212,28 @@ def test_bg_fills_flex_allocated_height():
         bg=2,
     )
     assert len(clean(v.render(10, 10))) == 10
+
+
+# ── Nested flat path offsets ────────────────────────────────────────
+
+
+def test_nested_hstack_flat_offsets():
+    inner = hstack(text("ab"), text("cd"), spacing=1)
+    outer = hstack(inner, text("X"), spacing=1)
+    assert vis(outer.render(20)) == ["ab·cd·X"]
+
+
+def test_nested_hstack_flat_offsets_deep():
+    a = hstack(text("AAA"), text("BBB"), spacing=1)
+    b = hstack(a, text("CCC"), spacing=1)
+    c = hstack(b, text("DDD"), spacing=1)
+    assert vis(c.render(30)) == ["AAA·BBB·CCC·DDD"]
+
+
+def test_nested_hstack_flat_total_width():
+    from terminal.measure import display_width, strip_ansi
+
+    inner = hstack(text("hello"), text("world"), spacing=1)
+    outer = hstack(inner, text("!"), spacing=1)
+    lines = outer.render(30)
+    assert display_width(strip_ansi(lines[0])) >= len("hello world !")

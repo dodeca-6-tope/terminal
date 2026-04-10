@@ -137,7 +137,7 @@ def _try_flatten(
             flat = c.flat_children
             if flat is not None:
                 # Save remaining siblings, then descend into the flat subtree
-                stack.append((nodes, i + 1, x, sp))
+                stack.append((nodes, i + 1, x + c.flex_basis, sp))
                 stack.append((flat, 0, x, c.flat_spacing))
                 break
             if c.grow or c.width is not None:

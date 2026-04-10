@@ -672,8 +672,10 @@ static PyObject *mod_hstack_join_row(PyObject *self, PyObject *args) {
                 }
                 j = end;
             } else {
+                int chw = cwidth(ch);
+                if (vis + chw > (int)cw) break;
                 outbuf_add(&ob, u8, encode_utf8(ch, u8));
-                vis += cwidth(ch);
+                vis += chw;
                 j++;
             }
         }
@@ -892,9 +894,18 @@ static PyObject *CTextRender_call(CTextRenderObject *self,
                     Py_DECREF(ell);
                     if (!str) return NULL;
                 }
+                PyObject *padded;
+                if (self->pl || self->pr) {
+                    padded = PyUnicode_FromFormat("%U%U%U",
+                        self->pad_l, str, self->pad_r);
+                    Py_DECREF(str);
+                    if (!padded) return NULL;
+                } else {
+                    padded = str;
+                }
                 PyObject *result = PyList_New(1);
-                if (!result) { Py_DECREF(str); return NULL; }
-                PyList_SET_ITEM(result, 0, str);
+                if (!result) { Py_DECREF(padded); return NULL; }
+                PyList_SET_ITEM(result, 0, padded);
                 return result;
             }
         }
