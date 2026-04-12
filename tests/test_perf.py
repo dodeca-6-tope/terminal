@@ -2,7 +2,7 @@
 
 If a test fails, its docstring names the exact optimisation that regressed.
 
-Budgets are ~3× measured median on Apple M-series (~5× for sub-ms
+Budgets are ~2× measured median on Apple M-series (~3× for sub-ms
 measurements where variance is highest).
 """
 
@@ -51,7 +51,7 @@ def test_clip_and_pad_ascii():
     """
     lines = ["x" * WIDTH] * 10_000
     elapsed = _timed(lambda: [clip_and_pad(l, WIDTH) for l in lines])
-    assert elapsed < 0.003, f"clip_and_pad ASCII 10k took {elapsed:.3f}s"
+    assert elapsed < 0.002, f"clip_and_pad ASCII 10k took {elapsed:.3f}s"
 
 
 def test_clip_and_pad_ansi():
@@ -62,7 +62,7 @@ def test_clip_and_pad_ansi():
     """
     lines = [f"\033[1m{'a' * 196}\033[0m"] * 10_000
     elapsed = _timed(lambda: [clip_and_pad(l, WIDTH) for l in lines])
-    assert elapsed < 0.35, f"clip_and_pad ANSI 10k took {elapsed:.3f}s"
+    assert elapsed < 0.28, f"clip_and_pad ANSI 10k took {elapsed:.3f}s"
 
 
 # ── display_width ─────────────────────────────────────────────────
@@ -76,7 +76,7 @@ def test_display_width_lru_cache():
     """
     strings = [f"\033[31m{'你好' * 20}abc\033[0m"] * 10_000
     elapsed = _timed(lambda: [display_width(s) for s in strings])
-    assert elapsed < 0.002, f"display_width cache 10k took {elapsed:.3f}s"
+    assert elapsed < 0.0015, f"display_width cache 10k took {elapsed:.3f}s"
 
 
 # ── cell buffer: parse_line ───────────────────────────────────────
@@ -96,7 +96,7 @@ def test_parse_line_c_ascii():
             parse_line(buf, i, l)
 
     elapsed = _timed(run, iterations=1000)
-    assert elapsed < 0.01, f"parse ASCII 1k frames took {elapsed:.3f}s"
+    assert elapsed < 0.008, f"parse ASCII 1k frames took {elapsed:.3f}s"
 
 
 def test_parse_line_c_ansi():
@@ -113,7 +113,7 @@ def test_parse_line_c_ansi():
             parse_line(buf, i, l)
 
     elapsed = _timed(run, iterations=1000)
-    assert elapsed < 0.04, f"parse ANSI 1k frames took {elapsed:.3f}s"
+    assert elapsed < 0.03, f"parse ANSI 1k frames took {elapsed:.3f}s"
 
 
 # ── cell buffer: render_diff ──────────────────────────────────────
@@ -130,7 +130,7 @@ def test_diff_full_frame():
         parse_line(old, i, "a" * WIDTH)
         parse_line(new, i, "b" * WIDTH)
     elapsed = _timed(lambda: render_diff(new, old), iterations=100)
-    assert elapsed < 0.01, f"diff changed 100 took {elapsed:.3f}s"
+    assert elapsed < 0.008, f"diff changed 100 took {elapsed:.3f}s"
 
 
 # ── cell buffer: output size (correctness) ────────────────────────
@@ -189,7 +189,7 @@ def test_hstack_flat_collapse():
 
     tree = build(5)
     elapsed = _timed(lambda: tree.render(WIDTH), iterations=10)
-    assert elapsed < 0.008, f"nested hstack x10 took {elapsed:.3f}s"
+    assert elapsed < 0.001, f"nested hstack x10 took {elapsed:.3f}s"
 
 
 def test_hstack_c_flex():
@@ -217,7 +217,7 @@ def test_hstack_c_flex():
     ]
     tree = vstack(*rows)
     elapsed = _timed(lambda: tree.render(WIDTH, HEIGHT * 4), iterations=50)
-    assert elapsed < 0.04, f"hstack grow 200x10 x50 took {elapsed:.3f}s"
+    assert elapsed < 0.03, f"hstack grow 200x10 x50 took {elapsed:.3f}s"
 
 
 # ── list component ────────────────────────────────────────────────
@@ -247,7 +247,7 @@ def test_list_item_cache():
             body.render(WIDTH, HEIGHT)
 
     elapsed = _timed(scroll_run)
-    assert elapsed < 0.008, f"list scroll cached 100 took {elapsed:.3f}s"
+    assert elapsed < 0.004, f"list scroll cached 100 took {elapsed:.3f}s"
 
 
 # ── full pipeline (build → render → parse → diff) ────────────────
@@ -314,7 +314,7 @@ def test_pipeline_cold():
             prev = buf
 
     elapsed = _timed(run)
-    assert elapsed < 0.05, f"cold pipeline 100 took {elapsed:.3f}s"
+    assert elapsed < 0.04, f"cold pipeline 100 took {elapsed:.3f}s"
 
 
 def test_pipeline_warm():
@@ -348,4 +348,4 @@ def test_pipeline_warm():
             prev = buf
 
     elapsed = _timed(run)
-    assert elapsed < 0.012, f"warm pipeline 100 took {elapsed:.3f}s"
+    assert elapsed < 0.008, f"warm pipeline 100 took {elapsed:.3f}s"
