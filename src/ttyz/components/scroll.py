@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
-from terminal.components.base import Renderable, frame
+from ttyz.components.base import Renderable, frame
 
 
 def fill_viewport(items: Iterator[Renderable], w: int, h: int) -> list[str]:

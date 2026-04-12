@@ -13,8 +13,8 @@ from collections.abc import Generator
 
 import pytest
 
-from terminal import TTY as Terminal
-from terminal.keys import Event, Focus, Mouse
+from ttyz import TTY as Terminal
+from ttyz.keys import Event, Focus, Mouse
 
 # ── TTY.render ────────────────────────────────────────────────────
 
@@ -24,11 +24,11 @@ def test_write_sends_command_sequences() -> None:
     import io
     from unittest.mock import patch
 
-    from terminal import SetTitle, ShowCursor
+    from ttyz import SetTitle, ShowCursor
 
     buf = io.StringIO()
     t = Terminal()
-    with patch("terminal.term.sys.stdout", buf):
+    with patch("ttyz.term.sys.stdout", buf):
         t.write(SetTitle("test"), ShowCursor())
     output = buf.getvalue()
     assert "\033]2;test\033\\" in output
@@ -40,13 +40,13 @@ def test_draw_writes_content() -> None:
     from os import terminal_size
     from unittest.mock import patch
 
-    from terminal.screen import Screen
+    from ttyz.screen import Screen
 
     chunks: list[str] = []
     screen = Screen(write=lambda data: chunks.append(data.decode()), flush=lambda: None)
     t = Terminal(screen=screen)
     size = terminal_size((40, 10))
-    with patch("terminal.screen.os.get_terminal_size", return_value=size):
+    with patch("ttyz.screen.os.get_terminal_size", return_value=size):
         t.draw(["hello", "world"])
     output = "".join(chunks)
     assert "hello" in output

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from terminal.components.base import Renderable, frame
-from terminal.measure import ANSI_RE, char_width, display_width
-from terminal.screen import clip
+from ttyz.components.base import Renderable, frame
+from ttyz.measure import ANSI_RE, char_width, display_width
+from ttyz.screen import clip
 
 _ALIGNMENTS = {"start", "end", "center"}
 _FRAC = {"start": 0, "center": 0.5, "end": 1}

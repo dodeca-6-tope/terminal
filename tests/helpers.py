@@ -1,6 +1,6 @@
 """Shared test helpers."""
 
-from terminal.measure import strip_ansi
+from ttyz.measure import strip_ansi
 
 
 def clean(lines: list[str]) -> list[str]:

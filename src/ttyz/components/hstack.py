@@ -11,10 +11,10 @@ Three render tiers (cheapest first):
 
 from __future__ import annotations
 
-from terminal.buffer import hstack_join_row, render_flat_line, resolve_col_widths
-from terminal.components.base import Renderable, frame
-from terminal.measure import display_width, distribute
-from terminal.screen import pad
+from ttyz.buffer import hstack_join_row, render_flat_line, resolve_col_widths
+from ttyz.components.base import Renderable, frame
+from ttyz.measure import display_width, distribute
+from ttyz.screen import pad
 
 
 def _wrap_chunks(strs: list[str], width: int, gap: int) -> list[str]:

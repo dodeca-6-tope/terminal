@@ -20,11 +20,11 @@ from __future__ import annotations
 
 import os
 
-from terminal.buffer import Renderable
+from ttyz.buffer import Renderable
 
 
 def _clip_overflow(lines: list[str], width: int) -> list[str]:
-    from terminal.screen import clip_and_pad
+    from ttyz.screen import clip_and_pad
 
     return [clip_and_pad(l, width) for l in lines]
 
@@ -81,7 +81,7 @@ def frame(
 
 
 def _apply_bg(lines: list[str], color: int, width: int) -> list[str]:
-    from terminal.screen import pad
+    from ttyz.screen import pad
 
     bg = f"\033[48;5;{color}m"
     reset = "\033[0m"

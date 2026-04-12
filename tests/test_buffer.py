@@ -9,8 +9,8 @@
 
 import pytest
 
-from terminal.buffer import Buffer, parse_line, render_diff, render_full
-from terminal.style import (
+from ttyz.buffer import Buffer, parse_line, render_diff, render_full
+from ttyz.style import (
     bg,
     bg_rgb,
     blink,
@@ -237,7 +237,7 @@ def test_parse_row_out_of_range():
 
 
 def test_osc_in_hstack_no_hang():
-    from terminal.buffer import hstack_join_row
+    from ttyz.buffer import hstack_join_row
 
     osc = "\033]8;;https://example.com\033\\click\033]8;;\033\\"
     result = hstack_join_row([osc], [10], 0)
@@ -253,7 +253,7 @@ def test_osc_skipped_in_cells():
 
 
 def test_osc_in_display_width():
-    from terminal.buffer import c_display_width
+    from ttyz.buffer import c_display_width
 
     osc = "\033]8;;https://example.com\033\\click\033]8;;\033\\"
     assert c_display_width(osc) == 5
@@ -263,16 +263,16 @@ def test_osc_in_display_width():
 
 
 def test_hstack_ansi_clips_to_width():
-    from terminal.buffer import hstack_join_row
-    from terminal.measure import display_width, strip_ansi
+    from ttyz.buffer import hstack_join_row
+    from ttyz.measure import display_width, strip_ansi
 
     result = hstack_join_row([bold("hello world")], [5], 0)
     assert display_width(strip_ansi(result)) <= 5
 
 
 def test_hstack_ansi_ascii_same_width():
-    from terminal.buffer import hstack_join_row
-    from terminal.measure import display_width, strip_ansi
+    from ttyz.buffer import hstack_join_row
+    from ttyz.measure import display_width, strip_ansi
 
     ascii_w = display_width(strip_ansi(hstack_join_row(["hello world"], [5], 0)))
     ansi_w = display_width(strip_ansi(hstack_join_row([bold("hello world")], [5], 0)))

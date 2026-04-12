@@ -2,10 +2,10 @@
 
 from helpers import vis
 
-from terminal import box, cond, text, vstack, zstack
-from terminal.components.base import Renderable
-from terminal.components.scroll import ScrollState
-from terminal.measure import display_width
+from ttyz import box, cond, text, vstack, zstack
+from ttyz.components.base import Renderable
+from ttyz.components.scroll import ScrollState
+from ttyz.measure import display_width
 
 
 def _block(char: str, w: int, h: int) -> Renderable:
@@ -201,7 +201,7 @@ def test_overlay_larger_than_base_clips_both_axes():
 
 
 def test_height_passed_to_growers():
-    from terminal import scroll
+    from ttyz import scroll
 
     s = ScrollState()
     items = [text(str(i)) for i in range(20)]
@@ -301,7 +301,7 @@ def test_flex_basis_is_max():
 
 
 def test_grow_not_propagated():
-    from terminal import scroll
+    from ttyz import scroll
 
     assert not zstack(text("hi"), text("fill", grow=1)).grow
     assert not zstack(text("hi"), text("no")).grow
@@ -349,7 +349,7 @@ def test_box_overlay_centered():
 
 
 def test_overlay_preserves_base_styling():
-    from terminal import bold
+    from ttyz import bold
 
     base = text(bold("hello world"))
     overlay = text("XX")
@@ -360,7 +360,7 @@ def test_overlay_preserves_base_styling():
 
 
 def test_overlay_preserves_base_color():
-    from terminal import color
+    from ttyz import color
 
     base = text(color(1, "aaabbbccc"))
     overlay = text("XX")

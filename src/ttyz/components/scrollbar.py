@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from terminal.components.base import Renderable, frame
-from terminal.components.scroll import ScrollState
-from terminal.style import dim
+from ttyz.components.base import Renderable, frame
+from ttyz.components.scroll import ScrollState
+from ttyz.style import dim
 
 ScrollbarFn = Callable[[int, int, int], list[str]]
 

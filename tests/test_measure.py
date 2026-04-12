@@ -1,6 +1,6 @@
 """Tests for display_width, strip_ansi, char_width, and slice_at_width."""
 
-from terminal.measure import char_width, display_width, slice_at_width, strip_ansi
+from ttyz.measure import char_width, display_width, slice_at_width, strip_ansi
 
 
 def test_plain_ascii():

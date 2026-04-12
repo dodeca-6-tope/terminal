@@ -2,8 +2,8 @@
 
 from helpers import clean
 
-from terminal import cond, scroll, text
-from terminal.components.scroll import ScrollState
+from ttyz import cond, scroll, text
+from ttyz.components.scroll import ScrollState
 
 
 def test_true_renders_child():

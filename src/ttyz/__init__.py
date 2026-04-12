@@ -1,4 +1,4 @@
-from terminal.components import (
+from ttyz.components import (
     InputBuffer,
     Keyed,
     ListState,
@@ -25,7 +25,7 @@ from terminal.components import (
     vstack,
     zstack,
 )
-from terminal.control import (
+from ttyz.control import (
     Command,
     CursorBack,
     CursorDown,
@@ -51,8 +51,8 @@ from terminal.control import (
     SetTitle,
     ShowCursor,
 )
-from terminal.keys import Event, Focus, Key, Mouse, Paste, Resize
-from terminal.style import (
+from ttyz.keys import Event, Focus, Key, Mouse, Paste, Resize
+from ttyz.style import (
     bg,
     bg_rgb,
     blink,
@@ -67,7 +67,7 @@ from terminal.style import (
     strikethrough,
     underline,
 )
-from terminal.term import TTY
+from ttyz.term import TTY
 
 __all__ = [
     "Command",

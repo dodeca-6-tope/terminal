@@ -6,9 +6,9 @@ pass-through, private children, empty render) follow identical rules.
 
 from helpers import vis
 
-from terminal import Renderable, cond, foreach, hstack, scroll, text, vstack, zstack
-from terminal.components.scroll import ScrollState
-from terminal.measure import display_width, strip_ansi
+from ttyz import Renderable, cond, foreach, hstack, scroll, text, vstack, zstack
+from ttyz.components.scroll import ScrollState
+from ttyz.measure import display_width, strip_ansi
 
 # ── grow delegation ───────────────────────────────────────────────────
 # Every wrapper that delegates flex_basis must also delegate grow.

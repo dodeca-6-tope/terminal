@@ -2,7 +2,7 @@
 
 from helpers import vis
 
-from terminal import (
+from ttyz import (
     bold,
     color,
     cond,

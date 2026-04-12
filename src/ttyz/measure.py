@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from functools import lru_cache
 
-from terminal.buffer import c_display_width, char_width  # noqa: F401 — re-exported
+from ttyz.buffer import c_display_width, char_width  # noqa: F401 — re-exported
 
 ANSI_RE = re.compile(r"\033\[[^@-~]*[@-~]")
 

@@ -2,9 +2,9 @@
 
 from helpers import vis
 
-from terminal import hstack, text, vstack
-from terminal.components.base import Renderable
-from terminal.components.table import table, table_row
+from ttyz import hstack, text, vstack
+from ttyz.components.base import Renderable
+from ttyz.components.table import table, table_row
 
 
 def weighted(label: str, grow: int = 0) -> Renderable:

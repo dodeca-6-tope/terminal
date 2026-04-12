@@ -2,8 +2,8 @@
 
 from helpers import vis
 
-from terminal import bold, box, scroll, text, vstack
-from terminal.components.scroll import ScrollState
+from ttyz import bold, box, scroll, text, vstack
+from ttyz.components.scroll import ScrollState
 
 # ── Border styles ────────────────────────────────────────────────────
 

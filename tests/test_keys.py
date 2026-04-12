@@ -6,7 +6,7 @@ Internal parse functions are not tested directly.
 
 import os
 
-from terminal.keys import Event, Focus, Key, KeyReader, Mouse, Paste
+from ttyz.keys import Event, Focus, Key, KeyReader, Mouse, Paste
 
 
 def _read_all(data: bytes) -> list[Event]:

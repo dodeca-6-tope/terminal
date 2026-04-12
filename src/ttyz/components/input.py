@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from terminal.components.base import Renderable, frame
-from terminal.keys import Event, Key, Paste
+from ttyz.components.base import Renderable, frame
+from ttyz.keys import Event, Key, Paste
 
 
 @dataclass(frozen=True, order=True)

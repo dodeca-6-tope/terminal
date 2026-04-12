@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import TypeVar
 
-from terminal.components.base import Renderable, frame
+from ttyz.components.base import Renderable, frame
 
 T = TypeVar("T")
 

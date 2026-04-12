@@ -6,9 +6,9 @@ import builtins
 from collections.abc import Callable, Hashable
 from typing import Generic, TypeVar
 
-from terminal.components.base import Renderable, frame
-from terminal.components.keyed import Keyed
-from terminal.components.scroll import ScrollState
+from ttyz.components.base import Renderable, frame
+from ttyz.components.keyed import Keyed
+from ttyz.components.scroll import ScrollState
 
 T = TypeVar("T", bound=Keyed)
 

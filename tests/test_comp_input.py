@@ -1,9 +1,9 @@
 """Tests for Input component."""
 
-from terminal import input
-from terminal.components.input import InputBuffer, display_text
-from terminal.keys import Paste
-from terminal.measure import strip_ansi
+from ttyz import input
+from ttyz.components.input import InputBuffer, display_text
+from ttyz.keys import Paste
+from ttyz.measure import strip_ansi
 
 
 def test_renders_value():

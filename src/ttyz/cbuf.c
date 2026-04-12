@@ -450,7 +450,7 @@ static PyMemberDef Buffer_members[] = {
 
 static PyTypeObject BufferType = {
     .ob_base      = PyVarObject_HEAD_INIT(NULL, 0)
-    .tp_name      = "terminal.cbuf.Buffer",
+    .tp_name      = "ttyz.cbuf.Buffer",
     .tp_basicsize = sizeof(BufferObject),
     .tp_flags     = Py_TPFLAGS_DEFAULT,
     .tp_new       = PyType_GenericNew,
@@ -939,7 +939,7 @@ static PyMemberDef CRenderable_members[] = {
 
 static PyTypeObject CRenderableType = {
     .ob_base      = PyVarObject_HEAD_INIT(NULL, 0)
-    .tp_name      = "terminal.cbuf.Renderable",
+    .tp_name      = "ttyz.cbuf.Renderable",
     .tp_basicsize = sizeof(CRenderableObject),
     .tp_flags     = Py_TPFLAGS_DEFAULT,
     .tp_new       = PyType_GenericNew,
@@ -1065,7 +1065,7 @@ static PyObject *CTextRender_call(CTextRenderObject *self,
 
 static PyTypeObject CTextRenderType = {
     .ob_base      = PyVarObject_HEAD_INIT(NULL, 0)
-    .tp_name      = "terminal.cbuf.TextRender",
+    .tp_name      = "ttyz.cbuf.TextRender",
     .tp_basicsize = sizeof(CTextRenderObject),
     .tp_flags     = Py_TPFLAGS_DEFAULT,
     .tp_new       = PyType_GenericNew,
@@ -1262,7 +1262,7 @@ static PyMethodDef module_methods[] = {
 
 static struct PyModuleDef module_def = {
     PyModuleDef_HEAD_INIT,
-    .m_name    = "terminal.cbuf",
+    .m_name    = "ttyz.cbuf",
     .m_doc     = "C-accelerated cell buffer for terminal rendering.",
     .m_size    = -1,
     .m_methods = module_methods,

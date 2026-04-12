@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from terminal.components.toast import ToastState
+from ttyz.components.toast import ToastState
 
 
 def test_show_and_active():
@@ -24,7 +24,7 @@ def test_multiple_active():
 
 def test_expired_pruned():
     t = ToastState(ttl=1)
-    with patch("terminal.components.toast.time") as mock_time:
+    with patch("ttyz.components.toast.time") as mock_time:
         mock_time.monotonic.return_value = 0.0
         t.show("old")
         mock_time.monotonic.return_value = 0.5
@@ -36,7 +36,7 @@ def test_expired_pruned():
 
 def test_custom_duration():
     t = ToastState(ttl=1)
-    with patch("terminal.components.toast.time") as mock_time:
+    with patch("ttyz.components.toast.time") as mock_time:
         mock_time.monotonic.return_value = 0.0
         t.show("short", duration=0.5)
         t.show("long", duration=5)
@@ -54,7 +54,7 @@ def test_level():
 def test_visible():
     t = ToastState(ttl=1)
     assert not t.visible
-    with patch("terminal.components.toast.time") as mock_time:
+    with patch("ttyz.components.toast.time") as mock_time:
         mock_time.monotonic.return_value = 0.0
         t.show("x")
         assert t.visible

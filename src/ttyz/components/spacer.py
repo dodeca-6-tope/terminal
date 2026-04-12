@@ -5,7 +5,7 @@ If not contained in a stack, it expands on both axes.
 
 from __future__ import annotations
 
-from terminal.components.base import Renderable
+from ttyz.components.base import Renderable
 
 
 def spacer(min_length: int = 0) -> Renderable:

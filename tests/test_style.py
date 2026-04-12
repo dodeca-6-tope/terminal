@@ -5,7 +5,7 @@
 3. Helpers compose (nest without breaking)
 """
 
-from terminal import (
+from ttyz import (
     bg,
     bg_rgb,
     blink,
@@ -20,7 +20,7 @@ from terminal import (
     strikethrough,
     underline,
 )
-from terminal.measure import strip_ansi
+from ttyz.measure import strip_ansi
 
 
 def test_each_helper_wraps_text():

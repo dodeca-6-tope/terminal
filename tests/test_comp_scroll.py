@@ -2,9 +2,9 @@
 
 from helpers import clean, vis
 
-from terminal import box, hstack, scroll, scrollbar, scrollbar_default, text, vstack
-from terminal.components.scroll import ScrollState
-from terminal.measure import display_width, strip_ansi
+from ttyz import box, hstack, scroll, scrollbar, scrollbar_default, text, vstack
+from ttyz.components.scroll import ScrollState
+from ttyz.measure import display_width, strip_ansi
 
 
 def _state(offset: int = 0) -> ScrollState:

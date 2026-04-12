@@ -4,7 +4,7 @@ All other modules import C functions through here, keeping a single
 point of coupling to the native layer.
 """
 
-from terminal.cbuf import (
+from ttyz.cbuf import (
     Buffer,
     Renderable,
     c_make_text,
@@ -17,7 +17,7 @@ from terminal.cbuf import (
     resolve_col_widths,
     set_text_render_fallback,
 )
-from terminal.cbuf import (
+from ttyz.cbuf import (
     display_width as c_display_width,
 )
 

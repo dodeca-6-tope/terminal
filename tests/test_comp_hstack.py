@@ -2,8 +2,8 @@
 
 from helpers import vis
 
-from terminal import cond, hstack, scroll, text, vstack
-from terminal.components.scroll import ScrollState
+from ttyz import cond, hstack, scroll, text, vstack
+from ttyz.components.scroll import ScrollState
 
 # ── Fixed layout ─────────────────────────────────────────────────────
 
@@ -204,7 +204,7 @@ def test_hstack_in_vstack_scroll_gets_remaining_height():
 def test_bg_fills_flex_allocated_height():
     from helpers import clean
 
-    from terminal import spacer
+    from ttyz import spacer
 
     v = vstack(
         hstack(text(""), grow=1, bg=1),
@@ -231,7 +231,7 @@ def test_nested_hstack_flat_offsets_deep():
 
 
 def test_nested_hstack_flat_total_width():
-    from terminal.measure import display_width, strip_ansi
+    from ttyz.measure import display_width, strip_ansi
 
     inner = hstack(text("hello"), text("world"), spacing=1)
     outer = hstack(inner, text("!"), spacing=1)

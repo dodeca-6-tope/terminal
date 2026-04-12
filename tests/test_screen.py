@@ -3,7 +3,7 @@
 from os import terminal_size
 from unittest.mock import patch
 
-from terminal.screen import Screen, clip
+from ttyz.screen import Screen, clip
 
 
 def _make_screen():
@@ -59,7 +59,7 @@ def test_clip_exact_width():
 
 
 def test_clip_zero_width():
-    from terminal.measure import display_width, strip_ansi
+    from ttyz.measure import display_width, strip_ansi
 
     assert clip("hello", 0) == ""
     result = clip("\033[1mhello\033[0m", 0)
@@ -71,19 +71,19 @@ def test_clip_zero_width():
 
 
 def test_pad_short_line():
-    from terminal.screen import pad
+    from ttyz.screen import pad
 
     assert pad("hi", 5) == "hi   "
 
 
 def test_pad_full_width_line():
-    from terminal.screen import pad
+    from ttyz.screen import pad
 
     assert pad("hello", 5) == "hello"
 
 
 def test_pad_with_ansi():
-    from terminal.screen import pad
+    from ttyz.screen import pad
 
     line = "\033[1mhi\033[0m"
     padded = pad(line, 5)
@@ -91,7 +91,7 @@ def test_pad_with_ansi():
 
 
 def test_pad_wide_chars():
-    from terminal.screen import pad
+    from ttyz.screen import pad
 
     assert pad("你好", 6) == "你好  "  # 4 cols + 2 spaces
 
@@ -103,10 +103,10 @@ def test_screen_resize_writes_all_rows():
     """After resize, output should contain all content and blank remaining rows."""
     s, chunks = _make_screen()
     size = terminal_size((20, 5))
-    with patch("terminal.screen.os.get_terminal_size", return_value=size):
+    with patch("ttyz.screen.os.get_terminal_size", return_value=size):
         s.render(["line1", "line2", "line3", "line4", "line5"])
     big = terminal_size((20, 10))
-    with patch("terminal.screen.os.get_terminal_size", return_value=big):
+    with patch("ttyz.screen.os.get_terminal_size", return_value=big):
         s.render(["line1", "line2"])
     output = chunks[-1]
     assert "line1" in output
@@ -120,7 +120,7 @@ def test_screen_shrinking_content_clears_old_rows():
     """Rendering fewer lines than before should blank the leftover rows."""
     s, chunks = _make_screen()
     size = terminal_size((20, 10))
-    with patch("terminal.screen.os.get_terminal_size", return_value=size):
+    with patch("ttyz.screen.os.get_terminal_size", return_value=size):
         s.render(["a", "b", "c", "d", "e"])
         s.render(["a", "b"])
     output = chunks[-1]
@@ -131,7 +131,7 @@ def test_screen_shrinking_content_clears_old_rows():
 
 def test_clip_non_sgr_csi_preserves_visible_text():
     """Non-SGR CSI sequences (like cursor-move) should not eat visible text."""
-    from terminal.measure import strip_ansi
+    from ttyz.measure import strip_ansi
 
     result = clip("AB\033[1;1HCD", 4)
     assert strip_ansi(result) == "ABCD"

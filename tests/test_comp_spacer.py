@@ -2,7 +2,7 @@
 
 from helpers import vis
 
-from terminal import hstack, spacer, text, vstack, zstack
+from ttyz import hstack, spacer, text, vstack, zstack
 
 # ── HStack: expands horizontally, not vertically ───────────────────
 

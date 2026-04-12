@@ -1,7 +1,7 @@
 """Tests for InputBuffer."""
 
-from terminal import InputBuffer, PasteRange, display_text
-from terminal.keys import Key, Paste
+from ttyz import InputBuffer, PasteRange, display_text
+from ttyz.keys import Key, Paste
 
 # ── Basic typing ─────────────────────────────────────────────────────
 

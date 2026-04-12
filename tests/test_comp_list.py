@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from terminal import ListState
+from ttyz import ListState
 
 
 @dataclass

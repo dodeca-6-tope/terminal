@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from terminal.components.base import Renderable, frame
-from terminal.measure import display_width, truncate
-from terminal.screen import clip_and_pad
+from ttyz.components.base import Renderable, frame
+from ttyz.measure import display_width, truncate
+from ttyz.screen import clip_and_pad
 
 BORDERS: dict[str, tuple[str, str, str, str, str, str]] = {
     # (top_left, top_right, bottom_left, bottom_right, horizontal, vertical)

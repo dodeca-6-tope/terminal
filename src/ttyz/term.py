@@ -14,8 +14,8 @@ from collections.abc import Callable
 from types import FrameType
 from typing import Any
 
-from terminal.control import Command
-from terminal.keys import (
+from ttyz.control import Command
+from ttyz.keys import (
     KITTY_DISABLE,
     KITTY_ENABLE,
     KITTY_QUERY,
@@ -23,7 +23,7 @@ from terminal.keys import (
     KeyReader,
     Resize,
 )
-from terminal.screen import Screen
+from ttyz.screen import Screen
 
 _ENTER = "\033[?1049h\033[?25l\033[?7l\033[?2004h\033[?1004h\033[?1000h\033[?1006h"
 _EXIT = "\033[?1006l\033[?1000l\033[?1004l\033[?2004l\033[?7h\033[?25h\033[?1049l"

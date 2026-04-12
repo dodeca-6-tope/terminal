@@ -6,10 +6,10 @@ import os
 import sys
 from collections.abc import Callable
 
-from terminal.buffer import Buffer, parse_line
-from terminal.buffer import render_diff as _buf_diff
-from terminal.buffer import render_full as _buf_full
-from terminal.measure import char_width, display_width
+from ttyz.buffer import Buffer, parse_line
+from ttyz.buffer import render_diff as _buf_diff
+from ttyz.buffer import render_full as _buf_full
+from ttyz.measure import char_width, display_width
 
 
 def clip_and_pad(line: str, width: int) -> str:

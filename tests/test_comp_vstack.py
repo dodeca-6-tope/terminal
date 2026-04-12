@@ -2,8 +2,8 @@
 
 from helpers import clean
 
-from terminal import scroll, text, vstack
-from terminal.components.scroll import ScrollState
+from ttyz import scroll, text, vstack
+from ttyz.components.scroll import ScrollState
 
 
 def test_stacks_children():
@@ -95,7 +95,7 @@ def test_flex_grow_false_without_growers():
 
 
 def test_bg_fills_flex_allocated_height():
-    from terminal import spacer
+    from ttyz import spacer
 
     v = vstack(
         vstack(text(""), grow=1, bg=1),

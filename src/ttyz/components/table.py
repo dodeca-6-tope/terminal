@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from terminal.components.base import Renderable, frame
-from terminal.measure import distribute
-from terminal.screen import pad
+from ttyz.components.base import Renderable, frame
+from ttyz.measure import distribute
+from ttyz.screen import pad
 
 
 class TableRow:

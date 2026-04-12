@@ -1,4 +1,4 @@
-"""Stress test — spinning 3D torus built from terminal components.
+"""Stress test — spinning 3D torus built from ttyz components.
 
 Exercises: text, hstack, vstack, zstack, box, table, cond, spacer,
 clip_and_pad, display_width, render_diff.
@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 
 from _torus import render_torus
 
-import terminal as t
+import ttyz as t
 
 
 @dataclass

@@ -2,7 +2,7 @@
 
 from helpers import vis
 
-from terminal import table, table_row, text
+from ttyz import table, table_row, text
 
 
 def test_aligns_columns():

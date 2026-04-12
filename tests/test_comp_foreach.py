@@ -2,7 +2,7 @@
 
 from helpers import vis
 
-from terminal import foreach, text
+from ttyz import foreach, text
 
 
 def test_renders_items():

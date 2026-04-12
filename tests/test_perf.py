@@ -9,17 +9,17 @@ measurements where variance is highest).
 import time
 from dataclasses import dataclass
 
-from terminal import (
+from ttyz import (
     ListState,
     Renderable,
     hstack,
     text,
     vstack,
 )
-from terminal.buffer import Buffer, parse_line, render_diff
-from terminal.components.list import list as tlist
-from terminal.measure import display_width
-from terminal.screen import clip_and_pad
+from ttyz.buffer import Buffer, parse_line, render_diff
+from ttyz.components.list import list as tlist
+from ttyz.measure import display_width
+from ttyz.screen import clip_and_pad
 
 
 @dataclass

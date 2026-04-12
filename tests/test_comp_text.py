@@ -2,8 +2,8 @@
 
 from helpers import vis
 
-from terminal import box, text
-from terminal.measure import display_width, strip_ansi, truncate
+from ttyz import box, text
+from ttyz.measure import display_width, strip_ansi, truncate
 
 # ── Render ───────────────────────────────────────────────────────────
 

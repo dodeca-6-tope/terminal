@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from terminal.buffer import c_make_text, set_text_render_fallback
-from terminal.components.base import Renderable, frame
-from terminal.measure import display_width, slice_at_width, strip_ansi
+from ttyz.buffer import c_make_text, set_text_render_fallback
+from ttyz.components.base import Renderable, frame
+from ttyz.measure import display_width, slice_at_width, strip_ansi
 
 
 def _wrap_line(line: str, width: int) -> list[str]:

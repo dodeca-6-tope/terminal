@@ -1,6 +1,6 @@
 """Tests for terminal control commands."""
 
-from terminal import (
+from ttyz import (
     CursorBack,
     CursorDown,
     CursorForward,
