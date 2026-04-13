@@ -45,6 +45,8 @@ def _escape_end(line: str, pos: int) -> int:
 
 
 def _clip_scan(line: str, width: int, *, pad_to: bool = False) -> str:
+    if width <= 0:
+        return ""
     visible = 0
     pos = 0
     while pos < len(line):

@@ -43,3 +43,9 @@ def test_paste_display():
 def test_flex_basis():
     assert input(InputBuffer("hello")).flex_basis > 0
     assert input(InputBuffer()).flex_basis == 0
+
+
+def test_empty_paste_no_degenerate_range():
+    ti = InputBuffer("hello")
+    ti.handle_key(Paste(text=""))
+    assert ti.pastes == []

@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from ttyz.buffer import c_make_text, set_text_render_fallback
 from ttyz.components.base import Renderable, frame
-from ttyz.measure import display_width, slice_at_width, strip_ansi
+from ttyz.measure import char_width, display_width, slice_at_width, strip_ansi
 
 
 def _wrap_line(line: str, width: int) -> list[str]:
     """Word-wrap a line, falling back to character-wrap for long words."""
+    if width <= 0:
+        return [line]
     if display_width(line) <= width:
         return [line]
     lines: list[str] = []
@@ -39,7 +41,14 @@ def _truncate_line(line: str, width: int, mode: str) -> str:
     if width <= 0:
         return ""
     if mode == "head":
-        return "…" + slice_at_width(stripped[::-1], width - 1)[::-1]
+        budget, w, i = width - 1, 0, len(stripped)
+        while i > 0:
+            cw = char_width(stripped[i - 1])
+            if w + cw > budget:
+                break
+            w += cw
+            i -= 1
+        return "…" + " " * (budget - w) + stripped[i:]
     if mode == "middle":
         left_w = (width - 1) // 2
         right_w = width - 1 - left_w

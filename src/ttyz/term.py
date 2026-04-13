@@ -60,22 +60,24 @@ class TTY:
 
     def cleanup(self) -> None:
         """Leave alt screen, show cursor, restore terminal."""
-        if not self._active:
-            return
-        self._active = False
-        self._screen.invalidate()
-        if self._kitty:
-            sys.stdout.write(KITTY_DISABLE)
-            self._kitty = False
-        sys.stdout.write(_EXIT)
-        sys.stdout.flush()
-        if self._saved and self._fd is not None:
-            termios.tcsetattr(self._fd, termios.TCSADRAIN, self._saved)
-        if self._prev_sigwinch is not None:
-            signal.signal(signal.SIGWINCH, self._prev_sigwinch)
-            self._prev_sigwinch = None
-        os.close(self._wake_r)
-        os.close(self._wake_w)
+        if self._active:
+            self._active = False
+            self._screen.invalidate()
+            if self._kitty:
+                sys.stdout.write(KITTY_DISABLE)
+                self._kitty = False
+            sys.stdout.write(_EXIT)
+            sys.stdout.flush()
+            if self._saved and self._fd is not None:
+                termios.tcsetattr(self._fd, termios.TCSADRAIN, self._saved)
+            if self._prev_sigwinch is not None:
+                signal.signal(signal.SIGWINCH, self._prev_sigwinch)
+                self._prev_sigwinch = None
+        if self._wake_r >= 0:
+            os.close(self._wake_r)
+            os.close(self._wake_w)
+            self._wake_r = -1
+            self._wake_w = -1
 
     def _on_sigwinch(self, signum: int, frame: FrameType | None) -> None:
         self._resized = True

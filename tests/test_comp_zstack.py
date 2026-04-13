@@ -5,7 +5,7 @@ from helpers import vis
 from ttyz import box, cond, text, vstack, zstack
 from ttyz.components.base import Renderable
 from ttyz.components.scroll import ScrollState
-from ttyz.measure import display_width
+from ttyz.measure import display_width, strip_ansi
 
 
 def _block(char: str, w: int, h: int) -> Renderable:
@@ -403,3 +403,40 @@ def test_invalid_align_items_raises():
 
     with pytest.raises(ValueError, match="unknown align_items"):
         zstack(text("x"), align_items="middle")
+
+
+# ── ANSI handling ───────────────────────────────────────────────────
+
+
+def test_non_sgr_csi_not_treated_as_style():
+    """Non-SGR CSI (cursor move) in base must not corrupt overlay output."""
+    from ttyz.components.base import Renderable
+
+    def base_render(w: int, h: int | None = None) -> list[str]:
+        return ["\033[31mA\033[10;20H" + "B" * (w - 2) + "\033[0m"]
+
+    def overlay_render(w: int, h: int | None = None) -> list[str]:
+        return ["X"]
+
+    base = Renderable(base_render, flex_basis=10)
+    overlay = Renderable(overlay_render, flex_basis=1)
+    lines = zstack(base, overlay).render(10, 1)
+    # The restored ANSI state must not contain "10;20" from the cursor move
+    assert "\033[10;20m" not in lines[0]
+
+
+def test_non_sgr_csi_split_preserves_visible_text():
+    """Non-SGR CSI in base must not eat visible characters during overlay stamp."""
+    from ttyz.components.base import Renderable
+
+    def base_render(w: int, h: int | None = None) -> list[str]:
+        return ["A\033[3JBC" + " " * (w - 4)]
+
+    def overlay_render(w: int, h: int | None = None) -> list[str]:
+        return ["X"]
+
+    base = Renderable(base_render, flex_basis=10)
+    overlay = Renderable(overlay_render, flex_basis=1)
+    lines = zstack(base, overlay).render(10, 1)
+    visible = strip_ansi(lines[0])
+    assert "B" in visible and "C" in visible

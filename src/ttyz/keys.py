@@ -23,10 +23,18 @@ class Key:
     def __eq__(self, other: object) -> bool:
         if isinstance(other, str):
             return self.name == other
+        if isinstance(other, Key):
+            return (self.name, self.shift, self.alt, self.ctrl, self.super) == (
+                other.name,
+                other.shift,
+                other.alt,
+                other.ctrl,
+                other.super,
+            )
         return NotImplemented
 
     def __hash__(self) -> int:
-        return hash(self.name)
+        return hash((self.name, self.shift, self.alt, self.ctrl, self.super))
 
 
 @dataclass(frozen=True)

@@ -55,9 +55,14 @@ def slice_at_width(s: str, max_width: int) -> str:
 
 def truncate(s: str, max_width: int, ellipsis: bool = False) -> str:
     """Truncate a string to max_width visible characters."""
-    stripped = strip_ansi(s)
-    if display_width(stripped) <= max_width:
+    if display_width(strip_ansi(s)) <= max_width:
         return s
+    if "\033" not in s:
+        if ellipsis:
+            return slice_at_width(s, max_width - 1) + "…"
+        return slice_at_width(s, max_width)
+    from ttyz.screen import clip
+
     if ellipsis:
-        return slice_at_width(stripped, max_width - 1) + "…"
-    return slice_at_width(stripped, max_width)
+        return clip(s, max_width - 1) + "…"
+    return clip(s, max_width)

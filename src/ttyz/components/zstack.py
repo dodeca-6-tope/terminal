@@ -30,7 +30,10 @@ def _active_ansi(s: str) -> str:
         return ""
     codes: list[str] = []
     for m in ANSI_RE.finditer(s):
-        params = m.group()[2:-1]
+        seq = m.group()
+        if not seq.endswith("m"):
+            continue
+        params = seq[2:-1]
         if params in ("0", ""):
             codes.clear()
         else:
@@ -46,7 +49,7 @@ def _split_at_col(s: str, col: int) -> tuple[str, str]:
     while pos < n and visible < col:
         if s[pos] == "\033" and pos + 1 < n and s[pos + 1] == "[":
             end = pos + 2
-            while end < n and s[end] != "m":
+            while end < n and not ("\x40" <= s[end] <= "\x7e"):
                 end += 1
             pos = end + 1
         else:

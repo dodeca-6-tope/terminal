@@ -2,7 +2,7 @@
 
 from helpers import vis
 
-from ttyz import box, text
+from ttyz import bold, box, text
 from ttyz.measure import display_width, strip_ansi, truncate
 
 # ── Render ───────────────────────────────────────────────────────────
@@ -214,8 +214,8 @@ def test_truncate_ellipsis():
     assert truncate("hello world", 8, ellipsis=True) == "hello w…"
 
 
-def test_truncate_strips_ansi():
-    assert truncate("\033[1mhello world\033[0m", 8) == "hello wo"
+def test_truncate_preserves_ansi():
+    assert truncate("\033[1mhello world\033[0m", 8) == "\033[1mhello wo\033[0m"
 
 
 def test_truncate_no_op_when_fits():
@@ -266,3 +266,20 @@ def test_tail_truncation_padding_c_matches_python():
     assert c_result[0].endswith("··"), (
         f"C path missing right padding: {c_result} vs Python: {py_result}"
     )
+
+
+def test_head_truncation_wide_chars_at_boundary():
+    lines = text("x你好世界", truncation="head").render(6)
+    assert display_width(strip_ansi(lines[0])) == 6
+
+
+def test_truncate_preserves_ansi_on_truncation():
+    styled = bold("hello world")
+    result = truncate(styled, 8)
+    assert "\033[1m" in result
+
+
+def test_wrap_at_zero_inner_width():
+    # padding == width → inner width 0, must not hang
+    lines = text("hello", wrap=True, padding_left=5).render(5)
+    assert len(lines) >= 1

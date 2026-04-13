@@ -295,3 +295,25 @@ def test_kitty_modified_fkey():
     assert isinstance(result, Key)
     assert result.name == "f5"
     assert result.alt
+
+
+# ── Key equality ────────────────────────────────────────────────────
+
+
+def test_key_equality_between_key_objects():
+    k1 = Key("enter")
+    k2 = Key("enter")
+    assert k1 is not k2
+    assert k1 == k2
+
+
+def test_key_equality_with_modifiers():
+    k1 = Key("a", ctrl=True)
+    k2 = Key("a", ctrl=True)
+    assert k1 is not k2
+    assert k1 == k2
+
+
+def test_key_inequality_different_modifiers():
+    assert Key("a") != Key("a", ctrl=True)
+    assert Key("a", shift=True) != Key("a", alt=True)

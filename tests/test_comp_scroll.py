@@ -765,3 +765,17 @@ def test_follow_tracks_growing_content_end_to_end():
 
     items.extend(text(str(i)) for i in range(25, 30))
     assert clean(scroll(*items, state=s).render(80, 3)) == ["27", "28", "29"]
+
+
+def test_scroll_follow_stays_off_when_content_fits():
+    s = ScrollState(follow=True)
+    items = [text("a"), text("b"), text("c")]
+    scroll(*items, state=s).render(80, 3)
+    assert s.follow is True
+
+    s.scroll_up()  # explicitly disable follow
+    assert s.follow is False
+
+    # follow should stay off when content fits viewport
+    scroll(*items, state=s).render(80, 3)
+    assert s.follow is False

@@ -85,7 +85,7 @@ def scroll(
         if state.follow:
             state.offset = state.max_offset
         state.offset = max(0, min(state.offset, state.max_offset))
-        if state.offset >= state.max_offset:
+        if state.total > state.height and state.offset >= state.max_offset:
             state.follow = True
 
         return fill_viewport(iter(children_list[state.offset :]), w, h)

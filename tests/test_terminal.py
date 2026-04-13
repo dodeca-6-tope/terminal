@@ -275,3 +275,12 @@ def test_no_fd_leak_after_exit() -> None:
     os.close(master)
     os.close(slave)
     assert after == before
+
+
+def test_no_fd_leak_without_entering_context() -> None:
+    """Creating a TTY and calling cleanup() without entering should not leak fds."""
+    before = _count_fds()
+    t = Terminal()
+    t.cleanup()
+    after = _count_fds()
+    assert after == before

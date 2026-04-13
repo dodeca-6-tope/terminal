@@ -59,12 +59,8 @@ def test_clip_exact_width():
 
 
 def test_clip_zero_width():
-    from ttyz.measure import display_width, strip_ansi
-
     assert clip("hello", 0) == ""
-    result = clip("\033[1mhello\033[0m", 0)
-    assert "\033[0m" in result
-    assert display_width(strip_ansi(result)) == 0
+    assert clip("\033[1mhello\033[0m", 0) == ""
 
 
 # ── pad ──────────────────────────────────────────────────────────────
@@ -135,3 +131,11 @@ def test_clip_non_sgr_csi_preserves_visible_text():
 
     result = clip("AB\033[1;1HCD", 4)
     assert strip_ansi(result) == "ABCD"
+
+
+def test_clip_zero_width_no_spurious_reset():
+    # Wide char triggers _clip_scan path (not the fast ASCII path)
+    result = clip("你好", 0)
+    assert result == "" or "\033[0m" not in result, (
+        f"clip(wide_str, 0) emitted spurious reset: {result!r}"
+    )

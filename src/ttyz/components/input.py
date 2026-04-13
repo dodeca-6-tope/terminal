@@ -135,6 +135,8 @@ class InputBuffer:
         self.cursor += len(text)
 
     def _paste(self, text: str) -> None:
+        if not text:
+            return
         start = self.cursor
         self._insert(text)
         self.pastes.append(PasteRange(start, start + len(text)))
