@@ -440,3 +440,13 @@ def test_non_sgr_csi_split_preserves_visible_text():
     lines = zstack(base, overlay).render(10, 1)
     visible = strip_ansi(lines[0])
     assert "B" in visible and "C" in visible
+
+
+def test_empty_string_overlay_preserves_base():
+    """An empty-string overlay should not corrupt the base layer."""
+    base_text = text("hello world")
+    empty = text("")
+    lines = zstack(base_text, empty).render(20, 1)
+    visible = strip_ansi(lines[0])
+    assert "hello" in visible
+    assert "world" in visible

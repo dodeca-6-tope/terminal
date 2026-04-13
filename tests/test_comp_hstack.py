@@ -237,3 +237,9 @@ def test_nested_hstack_flat_total_width():
     outer = hstack(inner, text("!"), spacing=1)
     lines = outer.render(30)
     assert display_width(strip_ansi(lines[0])) >= len("hello world !")
+
+
+def test_all_hidden_cond_children():
+    h = hstack(cond(False, text("a")), cond(False, text("b")))
+    lines = h.render(80)
+    assert lines == [""]

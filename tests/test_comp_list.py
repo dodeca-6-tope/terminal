@@ -81,3 +81,28 @@ def test_set_items_to_empty():
     s.set_items([])
     assert s.cursor == 0
     assert s.current is None
+
+
+def test_set_items_invalidates_render_cache():
+    from helpers import clean
+
+    from ttyz import list, text
+    from ttyz.components.base import Renderable
+
+    @dataclass
+    class LabelItem:
+        key: str
+        label: str
+
+    state = ListState([LabelItem("a", "original")])
+
+    def render_fn(item: LabelItem, selected: bool) -> Renderable:
+        return text(item.label)
+
+    comp = list(state, render_fn)
+    lines1 = clean(comp.render(80, 5))
+    assert lines1[0] == "original"
+
+    state.set_items([LabelItem("a", "UPDATED")])
+    lines2 = clean(comp.render(80, 5))
+    assert lines2[0] == "UPDATED"

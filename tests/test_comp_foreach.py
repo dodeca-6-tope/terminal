@@ -1,6 +1,6 @@
 """Tests for ForEach component."""
 
-from helpers import vis
+from helpers import clean, vis
 
 from ttyz import foreach, text
 
@@ -22,3 +22,10 @@ def test_empty_list():
 
 def test_flex_basis():
     assert foreach(["hi", "hello"], lambda item, i: text(item)).flex_basis == 5
+
+
+def test_children_get_outer_height():
+    """text() children ignore h, so render is the same with or without height."""
+    items = ["a", "b", "c"]
+    f = foreach(items, lambda item, i: text(item))
+    assert clean(f.render(80)) == clean(f.render(80, 10)) == ["a", "b", "c"]

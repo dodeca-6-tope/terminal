@@ -14,6 +14,8 @@ from ttyz.measure import char_width, display_width
 
 def clip_and_pad(line: str, width: int) -> str:
     """Clip to width visible characters and pad with spaces to exactly width."""
+    if width <= 0:
+        return ""
     if "\033" not in line and line.isascii():
         n = len(line)
         return line[:width] if n >= width else line + " " * (width - n)
@@ -22,6 +24,8 @@ def clip_and_pad(line: str, width: int) -> str:
 
 def clip(line: str, width: int) -> str:
     """Clip a line to width visible characters, preserving ANSI escapes."""
+    if width <= 0:
+        return ""
     if "\033" not in line and line.isascii():
         return line[:width]
     return _clip_scan(line, width)

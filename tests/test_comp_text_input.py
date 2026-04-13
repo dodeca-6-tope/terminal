@@ -856,3 +856,24 @@ def test_init_pastes_sorted():
     """Pastes provided out of order are sorted."""
     ti = InputBuffer("aabbcc", pastes=[PasteRange(4, 6), PasteRange(0, 2)])
     assert ti.pastes == [PasteRange(0, 2), PasteRange(4, 6)]
+
+
+def test_clear_line_paste_spanning_cursor():
+    """clear_line at cursor inside a paste: surviving portion stays valid."""
+    ti = InputBuffer("xxPASTEDyy", cursor=4, pastes=[PasteRange(2, 8)])
+    ti.handle_key(Key("clear-line"))
+    assert ti.value == "STEDyy"
+    assert ti.cursor == 0
+    if ti.pastes:
+        p = ti.pastes[0]
+        assert 0 <= p.start < p.end <= len(ti.value)
+
+
+def test_display_cursor_inside_paste():
+    from ttyz.components.input import display_cursor
+
+    ti = InputBuffer("abPASTEDcd", cursor=5, pastes=[PasteRange(2, 8)])
+    dc = display_cursor(ti)
+    assert dc >= 0
+    disp = display_text(ti)
+    assert dc <= len(disp)

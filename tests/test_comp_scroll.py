@@ -779,3 +779,20 @@ def test_scroll_follow_stays_off_when_content_fits():
     # follow should stay off when content fits viewport
     scroll(*items, state=s).render(80, 3)
     assert s.follow is False
+
+
+def test_scroll_state_zero_total_scroll_down():
+    s = ScrollState()
+    s.height = 5
+    s.total = 0
+    s.scroll_down(10)
+    assert s.offset == 0
+
+
+def test_scrollbar_uses_state_height_not_render_h():
+    """Scrollbar uses state.height from a prior scroll render, not the h argument."""
+    s = ScrollState()
+    s.total = 100
+    # state.height is still 0 — scrollbar produces no lines
+    lines = scrollbar(state=s).render(1, 10)
+    assert lines == []

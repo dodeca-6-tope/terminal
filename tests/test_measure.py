@@ -1,6 +1,13 @@
 """Tests for display_width, strip_ansi, char_width, and slice_at_width."""
 
-from ttyz.measure import char_width, display_width, slice_at_width, strip_ansi
+from ttyz.measure import (
+    char_width,
+    display_width,
+    distribute,
+    slice_at_width,
+    strip_ansi,
+    truncate,
+)
 
 
 def test_plain_ascii():
@@ -96,3 +103,41 @@ def test_display_width_long_wide():
 def test_display_width_long_ansi():
     s = "\033[31m" + "x" * 600 + "\033[0m"
     assert display_width(s) == 600
+
+
+# ── slice_at_width edge cases ──────────────────────────────────────
+
+
+def test_slice_at_width_negative():
+    assert slice_at_width("hello", -1) == ""
+
+
+def test_slice_at_width_zero():
+    assert slice_at_width("hello", 0) == ""
+
+
+# ── truncate edge cases ────────────────────────────────────────────
+
+
+def test_truncate_zero_width():
+    assert truncate("title", 0) == ""
+    assert truncate("title", 0, ellipsis=True) == ""
+
+
+def test_truncate_negative_width():
+    assert truncate("hello", -1) == ""
+
+
+# ── distribute edge cases ──────────────────────────────────────────
+
+
+def test_distribute_all_zero_weights():
+    assert distribute(100, [0, 0]) == [0, 0]
+
+
+def test_distribute_zero_total():
+    assert distribute(0, [1, 2, 3]) == [0, 0, 0]
+
+
+def test_distribute_empty_weights():
+    assert distribute(100, []) == []

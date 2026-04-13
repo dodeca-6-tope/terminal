@@ -29,6 +29,8 @@ def distribute(total: int, weights: list[int]) -> list[int]:
     if not weights:
         return []
     total_weight = sum(weights)
+    if total_weight == 0:
+        return [0] * len(weights)
     cum_weight = 0
     cum_space = 0
     sizes: list[int] = []
@@ -42,6 +44,8 @@ def distribute(total: int, weights: list[int]) -> list[int]:
 
 def slice_at_width(s: str, max_width: int) -> str:
     """Slice a plain string to fit within max_width display columns."""
+    if max_width <= 0:
+        return ""
     if s.isascii():
         return s[:max_width]
     w = 0
@@ -55,6 +59,8 @@ def slice_at_width(s: str, max_width: int) -> str:
 
 def truncate(s: str, max_width: int, ellipsis: bool = False) -> str:
     """Truncate a string to max_width visible characters."""
+    if max_width <= 0:
+        return ""
     if display_width(strip_ansi(s)) <= max_width:
         return s
     if "\033" not in s:

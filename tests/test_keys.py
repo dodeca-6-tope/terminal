@@ -317,3 +317,24 @@ def test_key_equality_with_modifiers():
 def test_key_inequality_different_modifiers():
     assert Key("a") != Key("a", ctrl=True)
     assert Key("a", shift=True) != Key("a", alt=True)
+
+
+def test_key_hash_consistent_with_equality():
+    k = Key("enter")
+    assert k == "enter"
+    assert hash(k) == hash("enter")
+
+
+def test_key_dict_lookup_by_string():
+    d: dict[Key | str, str] = {Key("enter"): "found"}
+    assert d.get("enter") == "found"
+
+
+def test_key_set_membership_by_string():
+    s = {Key("enter")}
+    assert "enter" in s
+
+
+def test_key_with_modifiers_not_equal_to_string():
+    assert Key("a", ctrl=True) != "a"
+    assert Key("enter", shift=True) != "enter"

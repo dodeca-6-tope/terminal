@@ -103,3 +103,11 @@ def test_bg_fills_flex_allocated_height():
         bg=2,
     )
     assert len(clean(v.render(10, 10))) == 10
+
+
+def test_height_child_with_height_spec():
+    """A child with height='2' is clipped to 2 lines even when parent has more."""
+    child = text("content", height="2")
+    v = vstack(child)
+    lines = v.render(80, 10)
+    assert len(lines) == 2

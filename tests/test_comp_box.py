@@ -175,3 +175,12 @@ def test_invalid_style_raises():
 
     with pytest.raises(ValueError, match="unknown border style"):
         box(text("x"), style="fancy")
+
+
+def test_narrow_box_title_does_not_overflow():
+    from ttyz.measure import display_width
+
+    b = box(text(""), title="title")
+    lines = b.render(4)
+    for line in lines:
+        assert display_width(line) <= 4

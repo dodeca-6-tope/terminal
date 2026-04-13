@@ -68,17 +68,21 @@ def list(
     bg: int | None = None,
     overflow: str = "visible",
 ) -> Renderable:
-    # Persists as long as the Renderable does — key → (selected, width, lines).
-    cache: dict[Hashable, tuple[bool, int, builtins.list[str]]] = {}
+    cache: dict[Hashable, tuple[int, bool, int, builtins.list[str]]] = {}
 
     def render_item(i: int, w: int) -> builtins.list[str]:
         item = state.items[i]
         sel = i == state.cursor
         entry = cache.get(item.key)
-        if entry is not None and entry[0] == sel and entry[1] == w:
-            return entry[2]
+        if (
+            entry is not None
+            and entry[0] == id(item)
+            and entry[1] == sel
+            and entry[2] == w
+        ):
+            return entry[3]
         rendered = render_fn(item, sel).render(w)
-        cache[item.key] = (sel, w, rendered)
+        cache[item.key] = (id(item), sel, w, rendered)
         return rendered
 
     def render(w: int, h: int | None = None) -> builtins.list[str]:

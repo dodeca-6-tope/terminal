@@ -69,3 +69,11 @@ def test_compose_rgb_and_attr():
 def test_compose_fg_and_bg():
     result = rgb(255, 0, 0, bg_rgb(0, 0, 255, "hi"))
     assert strip_ansi(result) == "hi"
+
+
+def test_inner_reset_kills_outer_attributes():
+    """Known limitation: inner \\033[0m resets all attributes, not just the inner one."""
+    styled = bold(color(1, "a") + " b")
+    idx = styled.find(" b")
+    before = styled[:idx]
+    assert before.endswith("\033[0m")

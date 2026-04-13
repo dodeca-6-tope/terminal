@@ -72,3 +72,12 @@ def test_flex_grow_with_fill_column():
 def test_flex_grow_false_without_fill():
     tbl = table(table_row(text("a"), text("b")))
     assert not tbl.grow
+
+
+def test_empty_row():
+    """A TableRow with zero cells should render without crashing."""
+    r1 = table_row(text("a"), text("b"))
+    r2 = table_row()
+    t = table(r1, r2)
+    lines = t.render(80)
+    assert len(lines) == 2

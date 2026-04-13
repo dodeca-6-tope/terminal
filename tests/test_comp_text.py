@@ -2,7 +2,7 @@
 
 from helpers import vis
 
-from ttyz import bold, box, text
+from ttyz import bold, box, color, text
 from ttyz.measure import display_width, strip_ansi, truncate
 
 # ── Render ───────────────────────────────────────────────────────────
@@ -283,3 +283,23 @@ def test_wrap_at_zero_inner_width():
     # padding == width → inner width 0, must not hang
     lines = text("hello", wrap=True, padding_left=5).render(5)
     assert len(lines) >= 1
+
+
+def test_head_truncation_strips_ansi():
+    """Known limitation: head truncation operates on stripped text."""
+    styled = color(1, "hello world here")
+    lines = text(styled, truncation="head").render(10)
+    assert "\033[" not in lines[0]
+
+
+def test_middle_truncation_strips_ansi():
+    """Known limitation: middle truncation operates on stripped text."""
+    styled = bold("hello world here")
+    lines = text(styled, truncation="middle").render(10)
+    assert "\033[" not in lines[0]
+
+
+def test_non_string_value():
+    assert vis(text(42).render(80)) == ["42"]
+    assert vis(text(None).render(80)) == ["None"]
+    assert vis(text([1, 2, 3]).render(80)) == ["[1,·2,·3]"]

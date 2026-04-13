@@ -3,7 +3,7 @@
 from os import terminal_size
 from unittest.mock import patch
 
-from ttyz.screen import Screen, clip
+from ttyz.screen import Screen, clip, clip_and_pad
 
 
 def _make_screen():
@@ -139,3 +139,16 @@ def test_clip_zero_width_no_spurious_reset():
     assert result == "" or "\033[0m" not in result, (
         f"clip(wide_str, 0) emitted spurious reset: {result!r}"
     )
+
+
+# ── Negative width ──────────────────────────────────────────────────
+
+
+def test_clip_negative_width():
+    assert clip("hello", -1) == ""
+    assert clip("\033[1mhello\033[0m", -1) == ""
+
+
+def test_clip_and_pad_negative_width():
+    assert clip_and_pad("hello", -1) == ""
+    assert clip_and_pad("\033[1mhello\033[0m", -1) == ""

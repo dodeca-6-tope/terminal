@@ -73,6 +73,7 @@ class TTY:
             if self._prev_sigwinch is not None:
                 signal.signal(signal.SIGWINCH, self._prev_sigwinch)
                 self._prev_sigwinch = None
+        atexit.unregister(self.cleanup)
         if self._wake_r >= 0:
             os.close(self._wake_r)
             os.close(self._wake_w)
