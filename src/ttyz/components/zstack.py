@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from ttyz.components.base import Renderable
 from ttyz.measure import ANSI_RE, char_width, display_width
-from ttyz.screen import clip
+from ttyz.screen import clip, escape_end
 
 _ALIGNMENTS = {"start", "end", "center"}
 _FRAC = {"start": 0, "center": 0.5, "end": 1}
@@ -47,11 +47,8 @@ def _split_at_col(s: str, col: int) -> tuple[str, str]:
     pos = 0
     n = len(s)
     while pos < n and visible < col:
-        if s[pos] == "\033" and pos + 1 < n and s[pos + 1] == "[":
-            end = pos + 2
-            while end < n and not ("\x40" <= s[end] <= "\x7e"):
-                end += 1
-            pos = end + 1
+        if s[pos] == "\033":
+            pos = escape_end(s, pos)
         else:
             visible += char_width(s[pos])
             pos += 1

@@ -24,7 +24,7 @@ static PyObject *mod_place_at_offsets(PyObject *self, PyObject *arg) {
     Py_ssize_t n = PyList_GET_SIZE(arg);
     if (n == 0) return PyUnicode_FromString("");
 
-    /* Validate items are tuples of length >= 3. */
+    /* Validate items and check all content is plain ASCII upfront. */
     for (Py_ssize_t i = 0; i < n; i++) {
         PyObject *item = PyList_GET_ITEM(arg, i);
         if (!PyTuple_Check(item) || PyTuple_GET_SIZE(item) < 3) {
@@ -32,6 +32,10 @@ static PyObject *mod_place_at_offsets(PyObject *self, PyObject *arg) {
                             "each item must be a tuple (offset, col_width, content)");
             return NULL;
         }
+        PyObject *content = PyTuple_GET_ITEM(item, 2);
+        if (PyUnicode_Check(content) && PyUnicode_GET_LENGTH(content) > 0
+            && !is_plain_ascii(content))
+            Py_RETURN_NONE;
     }
 
     /* First pass: compute total output width from last item. */
@@ -48,31 +52,21 @@ static PyObject *mod_place_at_offsets(PyObject *self, PyObject *arg) {
     Py_UCS1 *buf = PyUnicode_1BYTE_DATA(out);
     memset(buf, ' ', total);
 
-    /* Place each item. */
+    /* Place each item — all content is known plain ASCII. */
     for (Py_ssize_t i = 0; i < n; i++) {
         PyObject *tup = PyList_GET_ITEM(arg, i);
         long off = PyLong_AsLong(PyTuple_GET_ITEM(tup, 0));
-        /* col_width unused — we already allocated total */
         PyObject *content = PyTuple_GET_ITEM(tup, 2);
 
         if (!PyUnicode_Check(content)) continue;
         Py_ssize_t clen = PyUnicode_GET_LENGTH(content);
         if (clen == 0) continue;
 
-        /* ASCII content with no ANSI escapes: copy bytes directly.
-           Content may be shorter than col_width — the buffer is
-           pre-filled with spaces so padding is automatic. */
-        if (is_plain_ascii(content)) {
-            const Py_UCS1 *src = PyUnicode_1BYTE_DATA(content);
-            Py_ssize_t copy = clen;
-            if (off + copy > total) copy = total - off;
-            if (copy > 0 && off >= 0)
-                memcpy(buf + off, src, copy);
-        } else {
-            /* Non-ASCII or ANSI content: fall back to Python. */
-            Py_DECREF(out);
-            Py_RETURN_NONE;
-        }
+        const Py_UCS1 *src = PyUnicode_1BYTE_DATA(content);
+        Py_ssize_t copy = clen;
+        if (off + copy > total) copy = total - off;
+        if (copy > 0 && off >= 0)
+            memcpy(buf + off, src, copy);
     }
 
     return out;

@@ -200,10 +200,6 @@ static PyObject *Buffer_diff(BufferObject *self, PyObject *args) {
     Cell *pc = prev->cells;
     size_t total = (size_t)w * (size_t)h;
 
-    /* Early out: identical buffers */
-    if (memcmp(cc, pc, total * sizeof(Cell)) == 0)
-        return PyUnicode_FromStringAndSize("", 0);
-
     OutBuf out;
     if (outbuf_init(&out, 4096) < 0)
         return PyErr_NoMemory();

@@ -29,7 +29,7 @@ def clip(line: str, width: int) -> str:
     return _clip_scan(line, width)
 
 
-def _escape_end(line: str, pos: int) -> int:
+def escape_end(line: str, pos: int) -> int:
     """If pos starts an escape sequence, return position after it. Else return pos."""
     if line[pos] != "\033":
         return pos
@@ -63,7 +63,7 @@ def _clip_scan(line: str, width: int, *, pad_to: bool = False) -> str:
     visible = 0
     pos = 0
     while pos < len(line):
-        end = _escape_end(line, pos)
+        end = escape_end(line, pos)
         if end != pos:
             pos = end
             continue
