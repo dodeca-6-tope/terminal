@@ -1,9 +1,9 @@
 """Horizontal stack layout component.
 
 Three render tiers (cheapest first):
-1. Flat (C, render_flat_line) — nested hstacks collapsed to absolute offsets.
+1. Flat (C, place_at_offsets) — nested hstacks collapsed to absolute offsets.
    ASCII only; returns None → Python fallback.
-2. Fast fixed (C, hstack_join_row) — pad + join when no leftover space and
+2. Fast fixed (C, pad_columns) — pad + join when no leftover space and
    justify is "start". Has ASCII and ANSI-aware paths.
 3. Justify (Python, _justify_row) — leftover space or non-start justify.
 
@@ -11,7 +11,7 @@ Three render tiers (cheapest first):
 
 from __future__ import annotations
 
-from ttyz.buffer import hstack_join_row, render_flat_line, resolve_col_widths
+from ttyz.buffer import flex_distribute, pad_columns, place_at_offsets
 from ttyz.components.base import Renderable, frame
 from ttyz.measure import display_width, distribute
 from ttyz.screen import pad
@@ -66,7 +66,7 @@ def _justify_row(cells: list[str], remaining: int, spacing: int, mode: str) -> s
     return joined
 
 
-def _resolve_col_widths(
+def _flex_distribute(
     act: list[Renderable], w: int, spacing: int
 ) -> tuple[list[int], int]:
     """Resolve column widths for children with explicit width specs."""
@@ -103,7 +103,7 @@ def _join_rows(
     for row in range(max_rows):
         cells = [_aligned_cell(col, row, max_rows, align) for col in columns]
         if fast:
-            lines.append(hstack_join_row(cells, col_widths, spacing))
+            lines.append(pad_columns(cells, col_widths, spacing))
         else:
             padded = [pad(cells[i], col_widths[i]) for i in range(len(cells))]
             lines.append(_justify_row(padded, remaining, spacing, justify))
@@ -180,7 +180,7 @@ def hstack(
 
     # ── Flat path ────────────────────────────────────────────────────
     # Collapses nested fixed-width hstacks into absolute offsets, then
-    # hands the list to a C function (render_flat_line) that writes all
+    # hands the list to a C function (place_at_offsets) that writes all
     # items in one memcpy pass.  Falls back to Python for non-ASCII.
     if (
         not has_grow
@@ -197,7 +197,7 @@ def hstack(
 
             def render_flat(w: int, h: int | None = None) -> list[str]:
                 # C fast path: returns None when content isn't pure ASCII.
-                line = render_flat_line(flat_items)
+                line = place_at_offsets(flat_items)
                 if line is not None:
                     return [line]
                 # Python fallback for ANSI / wide-char content.
@@ -234,12 +234,12 @@ def hstack(
 
     elif any(c.width is not None for c in act):
         # Children with explicit width specs (e.g. "50%") need the
-        # Python _resolve_col_widths for children with explicit width specs.
+        # Python _flex_distribute for children with explicit width specs.
 
         def render(w: int, h: int | None = None) -> list[str]:
             if not act:
                 return [""] * h if h else [""]
-            col_widths, remaining = _resolve_col_widths(act, w, spacing)
+            col_widths, remaining = _flex_distribute(act, w, spacing)
             columns = [
                 c.render(w if c.width is not None else col_widths[i], h)
                 if c.grow
@@ -259,7 +259,7 @@ def hstack(
         # Hot path (most list items land here): all children use
         # flex_basis/grow, no explicit widths.  Pre-compute the flex
         # metadata once so the per-frame render just passes two lists
-        # to the C resolve_col_widths function.
+        # to the C flex_distribute function.
         bases_list = [c.flex_basis for c in act]
         grows_list = [c.grow for c in act]
         start_justify = justify_content == "start" and align_items == "start"
@@ -268,7 +268,7 @@ def hstack(
             if not act:
                 return [""] * h if h else [""]
             # C function: resolves flex distribution in one call.
-            col_widths = resolve_col_widths(bases_list, grows_list, w, spacing)
+            col_widths = flex_distribute(bases_list, grows_list, w, spacing)
             columns = [
                 c.render(col_widths[i], h) if c.grow else c.render(col_widths[i])
                 for i, c in enumerate(act)
@@ -278,7 +278,7 @@ def hstack(
             # hand the strings straight to the C join function.
             if start_justify and all(len(col) == 1 for col in columns):
                 return [
-                    hstack_join_row(
+                    pad_columns(
                         [col[0] for col in columns],
                         col_widths,
                         spacing,

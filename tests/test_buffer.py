@@ -237,10 +237,10 @@ def test_parse_row_out_of_range():
 
 
 def test_osc_in_hstack_no_hang():
-    from ttyz.buffer import hstack_join_row
+    from ttyz.buffer import pad_columns
 
     osc = "\033]8;;https://example.com\033\\click\033]8;;\033\\"
-    result = hstack_join_row([osc], [10], 0)
+    result = pad_columns([osc], [10], 0)
     assert "click" in result
 
 
@@ -259,21 +259,21 @@ def test_osc_in_display_width():
     assert c_display_width(osc) == 5
 
 
-# ── hstack_join_row ──────────────────────────────────────────────────
+# ── pad_columns ──────────────────────────────────────────────────
 
 
 def test_hstack_ansi_clips_to_width():
-    from ttyz.buffer import hstack_join_row
+    from ttyz.buffer import pad_columns
     from ttyz.measure import display_width, strip_ansi
 
-    result = hstack_join_row([bold("hello world")], [5], 0)
+    result = pad_columns([bold("hello world")], [5], 0)
     assert display_width(strip_ansi(result)) <= 5
 
 
 def test_hstack_ansi_ascii_same_width():
-    from ttyz.buffer import hstack_join_row
+    from ttyz.buffer import pad_columns
     from ttyz.measure import display_width, strip_ansi
 
-    ascii_w = display_width(strip_ansi(hstack_join_row(["hello world"], [5], 0)))
-    ansi_w = display_width(strip_ansi(hstack_join_row([bold("hello world")], [5], 0)))
+    ascii_w = display_width(strip_ansi(pad_columns(["hello world"], [5], 0)))
+    ansi_w = display_width(strip_ansi(pad_columns([bold("hello world")], [5], 0)))
     assert ascii_w == ansi_w

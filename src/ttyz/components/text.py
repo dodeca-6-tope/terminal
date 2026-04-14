@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ttyz.buffer import c_make_text, set_text_render_fallback
+from ttyz.buffer import make_text_render, set_text_render_fallback
 from ttyz.components.base import Renderable, frame
 from ttyz.measure import char_width, display_width, slice_at_width, strip_ansi
 
@@ -103,7 +103,7 @@ def text(
     pr = padding if padding_right is None else padding_right
 
     # C: parse + display_width + TextRender creation in one call.
-    render, _, visible_w = c_make_text(value, truncation, pl, pr, wrap)
+    render, _, visible_w = make_text_render(value, truncation, pl, pr, wrap)
     basis = visible_w + pl + pr
 
     # Skip frame() indirection when no constraints — avoids an extra Renderable.

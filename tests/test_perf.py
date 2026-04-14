@@ -174,7 +174,7 @@ def test_diff_one_line_output_bounded():
 
 
 def test_hstack_flat_collapse():
-    """Guard: hstack Tier 1 flat path — _try_flatten + C render_flat_line.
+    """Guard: hstack Tier 1 flat path — _try_flatten + C place_at_offsets.
 
     Optimisation in hstack.py + cbuf.c: nested fixed-width hstacks are
     collapsed into flat offset arrays and rendered with ASCII memcpy.
@@ -195,8 +195,8 @@ def test_hstack_flat_collapse():
 def test_hstack_c_flex():
     """Regression guard: hstack flex render pipeline.
 
-    Disabling C ASCII memcpy in hstack_join_row adds ~24%, disabling
-    C resolve_col_widths adds ~41% — neither enough to blow budget
+    Disabling C ASCII memcpy in pad_columns adds ~24%, disabling
+    C flex_distribute adds ~41% — neither enough to blow budget
     without flaking.  Guards overall flex hstack speed.
     """
     rows = [

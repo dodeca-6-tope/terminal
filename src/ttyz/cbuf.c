@@ -661,15 +661,15 @@ static PyObject *mod_display_width(PyObject *self, PyObject *arg) {
     return PyLong_FromLong(str_display_width(arg));
 }
 
-/* ── render_flat_line ─────────────────────────────────────────────── */
+/* ── place_at_offsets ─────────────────────────────────────────────── */
 /*
- * render_flat_line(items) -> str
+ * place_at_offsets(items) -> str
  *
  * items: list of (offset: int, col_width: int, content: str)
  * Builds a single line by placing each content at its offset, padded to
  * col_width.  Gaps between items are filled with spaces.
  */
-static PyObject *mod_render_flat_line(PyObject *self, PyObject *arg) {
+static PyObject *mod_place_at_offsets(PyObject *self, PyObject *arg) {
     if (!PyList_Check(arg)) {
         PyErr_SetString(PyExc_TypeError, "expected a list");
         return NULL;
@@ -725,9 +725,9 @@ static PyObject *mod_render_flat_line(PyObject *self, PyObject *arg) {
     return out;
 }
 
-/* ── hstack_join_row ─────────────────────────────────────────────── */
+/* ── pad_columns ─────────────────────────────────────────────── */
 /*
- * hstack_join_row(cells, col_widths, spacing) -> str
+ * pad_columns(cells, col_widths, spacing) -> str
  *
  * cells:      list[str]  — rendered content for each column
  * col_widths: list[int]  — target width for each column
@@ -736,7 +736,7 @@ static PyObject *mod_render_flat_line(PyObject *self, PyObject *arg) {
  * For each cell: pad content to col_width with spaces, join with spacing.
  * ANSI-aware: skips escape sequences when measuring content width.
  */
-static PyObject *mod_hstack_join_row(PyObject *self, PyObject *args) {
+static PyObject *mod_pad_columns(PyObject *self, PyObject *args) {
     PyObject *cells, *widths;
     int spacing;
     if (!PyArg_ParseTuple(args, "OOi", &cells, &widths, &spacing))
@@ -1032,11 +1032,11 @@ static PyTypeObject CTextRenderType = {
     .tp_doc       = "C-accelerated text render callable.",
 };
 
-/* ── c_make_text factory ─────────────────────────────────────────── */
+/* ── make_text_render factory ─────────────────────────────────────────── */
 /*
- * c_make_text(value, truncation, pl, pr, wrap) -> (TextRender, lines, visible_w)
+ * make_text_render(value, truncation, pl, pr, wrap) -> (TextRender, lines, visible_w)
  */
-static PyObject *mod_c_make_text(PyObject *self, PyObject *args) {
+static PyObject *mod_make_text_render(PyObject *self, PyObject *args) {
     PyObject *value, *truncation;
     int pl, pr, wrap;
 
@@ -1126,9 +1126,9 @@ static PyObject *mod_set_text_render_fallback(PyObject *self, PyObject *arg) {
     Py_RETURN_NONE;
 }
 
-/* ── resolve_col_widths ────────────────────────────────────────────── */
+/* ── flex_distribute ────────────────────────────────────────────── */
 /*
- * resolve_col_widths(bases, grows, width, spacing) -> list[int]
+ * flex_distribute(bases, grows, width, spacing) -> list[int]
  *
  * bases:   list[int] — flex_basis for each column
  * grows:   list[int] — grow weight for each column (0 = fixed)
@@ -1137,9 +1137,9 @@ static PyObject *mod_set_text_render_fallback(PyObject *self, PyObject *arg) {
  *
  * Returns resolved column widths with remaining space distributed
  * proportionally among grow columns.  Mirrors the Python
- * _resolve_col_widths + distribute logic.
+ * _flex_distribute + distribute logic.
  */
-static PyObject *mod_resolve_col_widths(PyObject *self, PyObject *args) {
+static PyObject *mod_flex_distribute(PyObject *self, PyObject *args) {
     PyObject *bases, *grows;
     int width, spacing;
     if (!PyArg_ParseTuple(args, "OOii", &bases, &grows, &width, &spacing))
@@ -1589,10 +1589,10 @@ static PyMethodDef module_methods[] = {
     {"render_diff", mod_render_diff, METH_VARARGS, "Render cell-level diff to ANSI."},
     {"char_width",     mod_char_width,     METH_O,       "Display width of a single character."},
     {"display_width",  mod_display_width,  METH_O,       "Display width of a string (ANSI-aware)."},
-    {"render_flat_line", mod_render_flat_line, METH_O,    "Render flat layout items into a single line."},
-    {"hstack_join_row",  mod_hstack_join_row,  METH_VARARGS, "Join cells with padding and spacing."},
-    {"resolve_col_widths", mod_resolve_col_widths, METH_VARARGS, "Resolve flex column widths in one shot."},
-    {"c_make_text", mod_c_make_text, METH_VARARGS, "Create a TextRender + parse lines + measure width."},
+    {"place_at_offsets", mod_place_at_offsets, METH_O,    "Render flat layout items into a single line."},
+    {"pad_columns",  mod_pad_columns,  METH_VARARGS, "Join cells with padding and spacing."},
+    {"flex_distribute", mod_flex_distribute, METH_VARARGS, "Resolve flex column widths in one shot."},
+    {"make_text_render", mod_make_text_render, METH_VARARGS, "Create a TextRender + parse lines + measure width."},
     {"set_text_render_fallback", mod_set_text_render_fallback, METH_O, "Set Python fallback for text full render."},
     {"distribute",      mod_distribute,      METH_VARARGS,                "Distribute total proportionally among weights."},
     {"slice_at_width",  mod_slice_at_width,  METH_VARARGS,                "Slice plain string to fit display width."},
