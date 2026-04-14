@@ -880,49 +880,7 @@ static int CRenderable_init(CRenderableObject *self, PyObject *args, PyObject *k
     return 0;
 }
 
-/* resolve "50%" or "28" against a parent dimension */
-static PyObject *resolve_dim(PyObject *value, int parent, int axis) {
-    if (value == NULL || value == Py_None)
-        Py_RETURN_NONE;
-    const char *s = PyUnicode_AsUTF8(value);
-    if (!s) return NULL;
-    Py_ssize_t slen = PyUnicode_GET_LENGTH(value);
-    if (slen > 0 && s[slen - 1] == '%') {
-        int pct = atoi(s);
-        int base = parent;
-        if (base <= 0) {
-            /* fallback: os.get_terminal_size()[axis] */
-            PyObject *os = PyImport_ImportModule("os");
-            if (!os) return NULL;
-            PyObject *gts = PyObject_CallMethod(os, "get_terminal_size", NULL);
-            Py_DECREF(os);
-            if (!gts) return NULL;
-            PyObject *item = PySequence_GetItem(gts, axis);
-            Py_DECREF(gts);
-            if (!item) return NULL;
-            base = (int)PyLong_AsLong(item);
-            Py_DECREF(item);
-        }
-        return PyLong_FromLong(base * pct / 100);
-    }
-    return PyLong_FromLong(atoi(s));
-}
-
-static PyObject *CRenderable_resolve_width(CRenderableObject *self, PyObject *args) {
-    int parent;
-    if (!PyArg_ParseTuple(args, "i", &parent)) return NULL;
-    return resolve_dim(self->width, parent, 0);
-}
-
-static PyObject *CRenderable_resolve_height(CRenderableObject *self, PyObject *args) {
-    int parent;
-    if (!PyArg_ParseTuple(args, "i", &parent)) return NULL;
-    return resolve_dim(self->height, parent, 1);
-}
-
 static PyMethodDef CRenderable_methods[] = {
-    {"resolve_width",  (PyCFunction)CRenderable_resolve_width,  METH_VARARGS, NULL},
-    {"resolve_height", (PyCFunction)CRenderable_resolve_height, METH_VARARGS, NULL},
     {NULL}
 };
 

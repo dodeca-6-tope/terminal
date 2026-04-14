@@ -89,8 +89,8 @@ def _layer_bounds(
 ) -> tuple[int, int, int, int]:
     """Compute (row_offset, col_offset, start, end) for a layer."""
     rendered_w = max((display_width(l) for l in layer), default=0)
-    layer_w = child.resolve_width(w) or rendered_w
-    layer_h = child.resolve_height(canvas_h) or len(layer)
+    layer_w = child.flex_basis if child.width is not None else rendered_w
+    layer_h = len(layer)
     row_off, col_off = _offsets(
         justify_content, align_items, (w, canvas_h), (layer_w, layer_h)
     )

@@ -11,35 +11,28 @@ def _resolve_flex_heights(
     w: int,
     h: int,
     spacing: int,
-) -> tuple[list[list[str] | None], dict[int, int], set[int]]:
-    """Pre-render non-flex children and compute flex-grow row allocations.
+) -> tuple[list[list[str] | None], dict[int, int]]:
+    """Pre-render non-grow children and compute flex-grow row allocations.
 
-    Returns (rendered, flex_heights, has_height) where rendered[i] is None
-    for deferred children and flex_heights maps grow-child indices to heights.
+    Returns (rendered, flex_heights) where rendered[i] is None for grow
+    children and flex_heights maps grow-child indices to heights.
     """
     rendered: list[list[str] | None] = []
     grow_items: list[tuple[int, int]] = []
-    height_indices: list[int] = []
     used = spacing * max(0, len(children) - 1)
 
     for i, c in enumerate(children):
-        if c.height is not None:
-            height_indices.append(i)
-            rh = c.resolve_height(h)
-            if rh is not None:
-                used += rh
-            rendered.append(None)
-        elif c.grow:
+        if c.grow and c.height is None:
             grow_items.append((i, c.grow))
             rendered.append(None)
         else:
-            lines = c.render(w)
+            lines = c.render(w, h) if c.height is not None else c.render(w)
             used += len(lines)
             rendered.append(lines)
 
     shares = distribute(max(0, h - used), [g for _, g in grow_items])
     flex_heights = {i: ht for (i, _), ht in zip(grow_items, shares)}
-    return rendered, flex_heights, set(height_indices)
+    return rendered, flex_heights
 
 
 def _virtualize(
@@ -92,15 +85,11 @@ def vstack(
             return [""] * h
         if not has_flex:
             return _virtualize(children, w, h, spacing)
-        rendered, flex_heights, has_height = _resolve_flex_heights(
-            children, w, h, spacing
-        )
+        rendered, flex_heights = _resolve_flex_heights(children, w, h, spacing)
         return join(
             [
                 f
                 if (f := rendered[i]) is not None
-                else child.render(w, h)
-                if i in has_height
                 else child.render(w, flex_heights[i])
                 for i, child in enumerate(children)
             ]

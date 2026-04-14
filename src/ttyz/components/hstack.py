@@ -75,12 +75,9 @@ def _resolve_col_widths(
     weights: list[tuple[int, int]] = []
     for i in range(n):
         c = act[i]
-        if c.width is not None:
-            col_widths[i] = c.resolve_width(w) or c.flex_basis
-        else:
-            col_widths[i] = c.flex_basis
-            if c.grow:
-                weights.append((i, c.grow))
+        col_widths[i] = c.flex_basis
+        if c.width is None and c.grow:
+            weights.append((i, c.grow))
     remaining = max(0, w - sum(col_widths) - spacing * max(0, n - 1))
     if weights:
         for (i, _), extra in zip(
@@ -237,7 +234,7 @@ def hstack(
 
     elif any(c.width is not None for c in act):
         # Children with explicit width specs (e.g. "50%") need the
-        # Python _resolve_col_widths which calls c.resolve_width().
+        # Python _resolve_col_widths for children with explicit width specs.
 
         def render(w: int, h: int | None = None) -> list[str]:
             if not act:
