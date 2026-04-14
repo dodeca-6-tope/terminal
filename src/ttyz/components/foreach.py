@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import TypeVar
 
-from ttyz.components.base import Renderable, frame
+from ttyz.components.base import Renderable
 
 T = TypeVar("T")
 
@@ -31,4 +31,6 @@ def foreach(
                 return lines[:h]
         return lines
 
-    return frame(Renderable(render, basis), width, height, grow, bg, overflow)
+    return Renderable(
+        render, basis, grow or 0, width=width, height=height, bg=bg, overflow=overflow
+    )

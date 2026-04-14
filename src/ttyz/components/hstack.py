@@ -11,7 +11,7 @@ Three render tiers (cheapest first):
 
 from __future__ import annotations
 
-from ttyz.components.base import Renderable, frame, resolve_size
+from ttyz.components.base import Renderable, resolve_size
 from ttyz.ext import flex_distribute, pad_columns, place_at_offsets
 from ttyz.measure import display_width, distribute
 from ttyz.screen import pad
@@ -211,7 +211,15 @@ def hstack(
                     pos = off + cw
                 return ["".join(parts)]
 
-            r = frame(Renderable(render_flat, basis), width, height, grow, bg, overflow)
+            r = Renderable(
+                render_flat,
+                basis,
+                grow or 0,
+                width=width,
+                height=height,
+                bg=bg,
+                overflow=overflow,
+            )
             # Stored on the Renderable so a parent hstack's _try_flatten
             # can see through this node and collapse it further.
             r.flat_children = children
@@ -294,4 +302,6 @@ def hstack(
                 align_items,
             )
 
-    return frame(Renderable(render, basis), width, height, grow, bg, overflow)
+    return Renderable(
+        render, basis, grow or 0, width=width, height=height, bg=bg, overflow=overflow
+    )

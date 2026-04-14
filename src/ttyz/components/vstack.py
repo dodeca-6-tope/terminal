@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ttyz.components.base import Renderable, frame
+from ttyz.components.base import Renderable
 from ttyz.measure import distribute
 
 
@@ -95,4 +95,6 @@ def vstack(
             ]
         )
 
-    return frame(Renderable(render, basis), width, height, grow, bg, overflow)
+    return Renderable(
+        render, basis, grow or 0, width=width, height=height, bg=bg, overflow=overflow
+    )

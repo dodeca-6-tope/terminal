@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
-from ttyz.components.base import Renderable, frame
+from ttyz.components.base import Renderable
 
 
 def fill_viewport(items: Iterator[Renderable], w: int, h: int) -> list[str]:
@@ -90,4 +90,12 @@ def scroll(
 
         return fill_viewport(iter(children_list[state.offset :]), w, h)
 
-    return frame(Renderable(render, basis, 1), width, height, grow, bg, overflow)
+    return Renderable(
+        render,
+        basis,
+        grow if grow is not None else 1,
+        width=width,
+        height=height,
+        bg=bg,
+        overflow=overflow,
+    )

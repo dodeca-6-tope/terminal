@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from ttyz.components.base import Renderable, frame
+from ttyz.components.base import Renderable
 from ttyz.keys import Event, Key, Paste
 
 
@@ -293,4 +293,6 @@ def input(
             return _wrap_with_cursor(txt, cur, w)
         return _wrap(txt, w)
 
-    return frame(Renderable(render, basis), width, height, grow, bg, overflow)
+    return Renderable(
+        render, basis, grow or 0, width=width, height=height, bg=bg, overflow=overflow
+    )

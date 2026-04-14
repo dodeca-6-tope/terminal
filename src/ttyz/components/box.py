@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ttyz.components.base import Renderable, frame
+from ttyz.components.base import Renderable
 from ttyz.measure import display_width, truncate
 from ttyz.screen import clip_and_pad
 
@@ -59,4 +59,12 @@ def box(
         lines.append(f"{bl}{hz * inner}{br}")
         return lines
 
-    return frame(Renderable(render, basis, grows), width, height, grow, bg, overflow)
+    return Renderable(
+        render,
+        basis,
+        grow if grow is not None else grows,
+        width=width,
+        height=height,
+        bg=bg,
+        overflow=overflow,
+    )

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ttyz.components.base import Renderable, frame
+from ttyz.components.base import Renderable
 from ttyz.ext import TextRender
 
 
@@ -26,7 +26,6 @@ def text(
     tr = TextRender(value, truncation, pl, pr, wrap)
     basis = tr.visible_w + pl + pr
 
-    # Skip frame() indirection when no constraints — avoids an extra Renderable.
-    if width is None and height is None and bg is None and overflow == "visible":
-        return Renderable(tr, basis, grow or 0)
-    return frame(Renderable(tr, basis), width, height, grow, bg, overflow)
+    return Renderable(
+        tr, basis, grow or 0, width=width, height=height, bg=bg, overflow=overflow
+    )

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ttyz.components.base import Renderable, frame
+from ttyz.components.base import Renderable
 from ttyz.measure import ANSI_RE, char_width, display_width
 from ttyz.screen import clip
 
@@ -127,4 +127,6 @@ def zstack(
                 canvas[row_off + i] = _stamp(canvas[row_off + i], col_off, layer[i], w)
         return canvas
 
-    return frame(Renderable(render, basis), width, height, grow, bg, overflow)
+    return Renderable(
+        render, basis, grow or 0, width=width, height=height, bg=bg, overflow=overflow
+    )

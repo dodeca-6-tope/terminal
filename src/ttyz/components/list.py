@@ -6,7 +6,7 @@ import builtins
 from collections.abc import Callable, Hashable
 from typing import Generic, TypeVar
 
-from ttyz.components.base import Renderable, frame
+from ttyz.components.base import Renderable
 from ttyz.components.keyed import Keyed
 from ttyz.components.scroll import ScrollState
 
@@ -108,4 +108,12 @@ def list(
             lines.extend([""] * (h - len(lines)))
         return lines
 
-    return frame(Renderable(render, 0, 1), width, height, grow, bg, overflow)
+    return Renderable(
+        render,
+        0,
+        grow if grow is not None else 1,
+        width=width,
+        height=height,
+        bg=bg,
+        overflow=overflow,
+    )

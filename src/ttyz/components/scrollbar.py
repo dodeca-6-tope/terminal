@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from ttyz.components.base import Renderable, frame
+from ttyz.components.base import Renderable
 from ttyz.components.scroll import ScrollState
 from ttyz.style import dim
 
@@ -38,4 +38,12 @@ def scrollbar(
             return [""] * (sh or 0)
         return render_fn(sh, state.total, state.offset)
 
-    return frame(Renderable(render, 1, 1), width, height, grow, bg, overflow)
+    return Renderable(
+        render,
+        1,
+        grow if grow is not None else 1,
+        width=width,
+        height=height,
+        bg=bg,
+        overflow=overflow,
+    )

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ttyz.components.base import Renderable, frame
+from ttyz.components.base import Renderable
 
 
 def cond(
@@ -21,4 +21,12 @@ def cond(
 
         return Renderable(_empty)
 
-    return frame(child, width, height, grow, bg, overflow)
+    return Renderable(
+        child.render,
+        child.flex_basis,
+        grow if grow is not None else child.grow,
+        width=width,
+        height=height,
+        bg=bg,
+        overflow=overflow,
+    )

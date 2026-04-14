@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ttyz.components.base import Renderable, frame
+from ttyz.components.base import Renderable
 from ttyz.measure import distribute
 from ttyz.screen import pad
 
@@ -96,4 +96,12 @@ def table(
         visible = rows_list if h is None else rows_list[:h]
         return [_render_row(row, resolved, sep) for row in visible]
 
-    return frame(Renderable(render, basis, r_grow), width, height, grow, bg, overflow)
+    return Renderable(
+        render,
+        basis,
+        grow if grow is not None else r_grow,
+        width=width,
+        height=height,
+        bg=bg,
+        overflow=overflow,
+    )
