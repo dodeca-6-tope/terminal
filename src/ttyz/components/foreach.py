@@ -27,6 +27,8 @@ def foreach(
         lines: list[str] = []
         for child in children:
             lines.extend(child.render(w, h))
+            if h is not None and len(lines) >= h:
+                return lines[:h]
         return lines
 
     return frame(Renderable(render, basis), width, height, grow, bg, overflow)

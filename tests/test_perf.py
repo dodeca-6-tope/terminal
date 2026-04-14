@@ -16,8 +16,8 @@ from ttyz import (
     text,
     vstack,
 )
-from ttyz.buffer import Buffer, parse_line, render_diff
 from ttyz.components.list import list as tlist
+from ttyz.ext import Buffer
 from ttyz.measure import display_width
 from ttyz.screen import clip_and_pad
 
@@ -85,7 +85,7 @@ def test_display_width_lru_cache():
 def test_parse_line_c_ascii():
     """Guard: parse_line C ASCII fast path — direct cell fill.
 
-    Optimisation in cbuf.c: is_plain_ascii() gates a loop that copies
+    Optimisation in _native: is_plain_ascii() gates a loop that copies
     ASCII bytes directly into cells, skipping the ANSI state machine.
     """
     buf = Buffer(WIDTH, HEIGHT)
@@ -93,7 +93,7 @@ def test_parse_line_c_ascii():
 
     def run():
         for i, l in enumerate(lines):
-            parse_line(buf, i, l)
+            buf.parse_line(i, l)
 
     elapsed = _timed(run, iterations=1000)
     assert elapsed < 0.008, f"parse ASCII 1k frames took {elapsed:.3f}s"
@@ -110,7 +110,7 @@ def test_parse_line_c_ansi():
 
     def run():
         for i, l in enumerate(lines):
-            parse_line(buf, i, l)
+            buf.parse_line(i, l)
 
     elapsed = _timed(run, iterations=1000)
     assert elapsed < 0.03, f"parse ANSI 1k frames took {elapsed:.3f}s"
@@ -122,14 +122,14 @@ def test_parse_line_c_ansi():
 def test_diff_full_frame():
     """Regression guard: render_diff dirty-run coalescing.
 
-    Guards cbuf.c run grouping for changed frames.  Cannot disable from Python.
+    Guards _native run grouping for changed frames.  Cannot disable from Python.
     """
     old = Buffer(WIDTH, HEIGHT)
     new = Buffer(WIDTH, HEIGHT)
     for i in range(HEIGHT):
-        parse_line(old, i, "a" * WIDTH)
-        parse_line(new, i, "b" * WIDTH)
-    elapsed = _timed(lambda: render_diff(new, old), iterations=100)
+        old.parse_line(i, "a" * WIDTH)
+        new.parse_line(i, "b" * WIDTH)
+    elapsed = _timed(lambda: new.diff(old), iterations=100)
     assert elapsed < 0.008, f"diff changed 100 took {elapsed:.3f}s"
 
 
@@ -141,9 +141,9 @@ def test_diff_identical_emits_nothing():
     a = Buffer(WIDTH, HEIGHT)
     b = Buffer(WIDTH, HEIGHT)
     for i in range(HEIGHT):
-        parse_line(a, i, "x" * WIDTH)
-        parse_line(b, i, "x" * WIDTH)
-    assert render_diff(a, b) == ""
+        a.parse_line(i, "x" * WIDTH)
+        b.parse_line(i, "x" * WIDTH)
+    assert a.diff(b) == ""
 
 
 def test_diff_single_cell_output_small():
@@ -151,10 +151,10 @@ def test_diff_single_cell_output_small():
     a = Buffer(WIDTH, HEIGHT)
     b = Buffer(WIDTH, HEIGHT)
     for i in range(HEIGHT):
-        parse_line(a, i, "x" * WIDTH)
-        parse_line(b, i, "x" * WIDTH)
-    parse_line(b, 0, "y" + "x" * (WIDTH - 1))
-    out = render_diff(b, a)
+        a.parse_line(i, "x" * WIDTH)
+        b.parse_line(i, "x" * WIDTH)
+    b.parse_line(0, "y" + "x" * (WIDTH - 1))
+    out = b.diff(a)
     assert len(out) < 20, f"single cell diff was {len(out)} bytes"
 
 
@@ -163,10 +163,10 @@ def test_diff_one_line_output_bounded():
     a = Buffer(WIDTH, HEIGHT)
     b = Buffer(WIDTH, HEIGHT)
     for i in range(HEIGHT):
-        parse_line(a, i, "x" * WIDTH)
-        parse_line(b, i, "x" * WIDTH)
-    parse_line(b, 0, "z" * WIDTH)
-    out = render_diff(b, a)
+        a.parse_line(i, "x" * WIDTH)
+        b.parse_line(i, "x" * WIDTH)
+    b.parse_line(0, "z" * WIDTH)
+    out = b.diff(a)
     assert len(out) < WIDTH + 50, f"one-line diff was {len(out)} bytes"
 
 
@@ -176,7 +176,7 @@ def test_diff_one_line_output_bounded():
 def test_hstack_flat_collapse():
     """Guard: hstack Tier 1 flat path — _try_flatten + C place_at_offsets.
 
-    Optimisation in hstack.py + cbuf.c: nested fixed-width hstacks are
+    Optimisation in hstack.py + _native: nested fixed-width hstacks are
     collapsed into flat offset arrays and rendered with ASCII memcpy.
     ~29× impact at depth 5.  Validated by monkeypatching _try_flatten
     to return None.
@@ -300,7 +300,7 @@ def test_pipeline_cold():
 
     prev = Buffer(WIDTH, HEIGHT)
     for i, l in enumerate(build_cold()[:HEIGHT]):
-        parse_line(prev, i, l)
+        prev.parse_line(i, l)
 
     def run():
         nonlocal prev
@@ -309,8 +309,8 @@ def test_pipeline_cold():
             lines = build_cold()
             buf = Buffer(WIDTH, HEIGHT)
             for i, l in enumerate(lines[:HEIGHT]):
-                parse_line(buf, i, l)
-            render_diff(buf, prev)
+                buf.parse_line(i, l)
+            buf.diff(prev)
             prev = buf
 
     elapsed = _timed(run)
@@ -334,7 +334,7 @@ def test_pipeline_warm():
     build_warm()  # prime cache
     prev = Buffer(WIDTH, HEIGHT)
     for i, l in enumerate(build_warm()[:HEIGHT]):
-        parse_line(prev, i, l)
+        prev.parse_line(i, l)
 
     def run():
         nonlocal prev
@@ -343,8 +343,8 @@ def test_pipeline_warm():
             lines = build_warm()
             buf = Buffer(WIDTH, HEIGHT)
             for i, l in enumerate(lines[:HEIGHT]):
-                parse_line(buf, i, l)
-            render_diff(buf, prev)
+                buf.parse_line(i, l)
+            buf.diff(prev)
             prev = buf
 
     elapsed = _timed(run)

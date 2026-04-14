@@ -111,8 +111,6 @@ def zstack(
         raise ValueError(f"unknown justify_content {justify_content!r}")
     if align_items not in _ALIGNMENTS:
         raise ValueError(f"unknown align_items {align_items!r}")
-    children = children
-
     basis = max((c.flex_basis for c in children), default=0)
 
     def render(w: int, h: int | None = None) -> list[str]:

@@ -6,9 +6,7 @@ import os
 import sys
 from collections.abc import Callable
 
-from ttyz.buffer import Buffer, parse_line
-from ttyz.buffer import render_diff as _buf_diff
-from ttyz.buffer import render_full as _buf_full
+from ttyz.ext import Buffer
 from ttyz.measure import char_width, display_width
 
 
@@ -86,8 +84,8 @@ class Screen:
         self._write = write
         self._flush = flush
         self._prev: Buffer | None = None
-        self._rows = 0
-        self._cols = 0
+        self._rows: int = 0
+        self._cols: int = 0
 
     def invalidate(self) -> None:
         """Force a full redraw on next render."""
@@ -101,13 +99,10 @@ class Screen:
         full = rows != self._rows or cols != self._cols or self._prev is None
 
         buf = Buffer(cols, rows)
-        for i, line in enumerate(lines[: min(len(lines), rows)]):
-            parse_line(buf, i, line)
+        for i, line in enumerate(lines[:rows]):
+            buf.parse_line(i, line)
 
-        if full or self._prev is None:
-            body = _buf_full(buf)
-        else:
-            body = _buf_diff(buf, self._prev)
+        body = buf.render_full() if full else buf.diff(self._prev)
 
         self._write(f"\033[?2026h{body}\033[?2026l".encode())
         self._flush()

@@ -9,7 +9,7 @@
 
 import pytest
 
-from ttyz.buffer import Buffer, parse_line, render_diff, render_full
+from ttyz.ext import Buffer
 from ttyz.style import (
     bg,
     bg_rgb,
@@ -30,7 +30,7 @@ from ttyz.style import (
 def _buf(lines: list[str], w: int = 20) -> Buffer:
     buf = Buffer(w, len(lines))
     for i, line in enumerate(lines):
-        parse_line(buf, i, line)
+        buf.parse_line(i, line)
     return buf
 
 
@@ -59,7 +59,7 @@ def test_wide_char_at_boundary_skipped():
 
 def test_empty_string():
     buf = Buffer(10, 1)
-    parse_line(buf, 0, "")
+    buf.parse_line(0, "")
     assert buf.row_text(0) == " " * 10
 
 
@@ -75,7 +75,7 @@ def _styled_differs_from_plain(styled_line: str, plain: str) -> bool:
     """True if the styled version produces different render output than plain."""
     a = _buf([styled_line])
     b = _buf([plain])
-    return render_diff(a, b) != ""
+    return a.diff(b) != ""
 
 
 def test_bold_survives():
@@ -139,7 +139,7 @@ def test_reset_mid_line_clears_style():
     """After reset, subsequent chars should match plain text."""
     a = _buf([bold("A") + "B"])
     b = _buf(["AB"])
-    diff = render_diff(a, b)
+    diff = a.diff(b)
     assert "A" in diff
     # B should not be in the diff — it matches plain
     # (it may appear as part of a run, but the key point is A is styled)
@@ -149,7 +149,7 @@ def test_identical_styled_content_no_diff():
     styled = rgb(1, 2, 3, "hi")
     a = _buf([styled])
     b = _buf([styled])
-    assert render_diff(a, b) == ""
+    assert a.diff(b) == ""
 
 
 # ── Diff contract ────────────────────────────────────────────────────
@@ -158,24 +158,24 @@ def test_identical_styled_content_no_diff():
 def test_identical_no_output():
     a = _buf(["same", "same"])
     b = _buf(["same", "same"])
-    assert render_diff(a, b) == ""
+    assert a.diff(b) == ""
 
 
 def test_changed_cells_in_output():
     old = _buf(["same", "old"])
     new = _buf(["same", "new"])
-    result = render_diff(new, old)
+    result = new.diff(old)
     assert "new" in result
     assert "same" not in result
 
 
 def test_new_content_in_blank_row():
     old = Buffer(20, 3)
-    parse_line(old, 0, "a")
+    old.parse_line(0, "a")
     new = Buffer(20, 3)
-    parse_line(new, 0, "a")
-    parse_line(new, 2, "c")
-    result = render_diff(new, old)
+    new.parse_line(0, "a")
+    new.parse_line(2, "c")
+    result = new.diff(old)
     assert "c" in result
     assert "a" not in result
 
@@ -183,12 +183,12 @@ def test_new_content_in_blank_row():
 def test_style_only_change_detected():
     a = _buf(["hello"])
     b = _buf([bold("hello")])
-    assert render_diff(b, a) != ""
+    assert b.diff(a) != ""
 
 
 def test_mismatched_dimensions_raises():
     with pytest.raises(ValueError):
-        render_diff(Buffer(10, 2), Buffer(20, 2))
+        Buffer(10, 2).diff(Buffer(20, 2))
 
 
 # ── Full render ──────────────────────────────────────────────────────
@@ -196,14 +196,14 @@ def test_mismatched_dimensions_raises():
 
 def test_full_render_contains_content():
     buf = _buf(["hello", "world"])
-    result = render_full(buf)
+    result = buf.render_full()
     assert "hello" in result
     assert "world" in result
 
 
 def test_full_render_includes_style():
     buf = _buf([bold("hello")])
-    result = render_full(buf)
+    result = buf.render_full()
     assert "hello" in result
     assert len(result) > len("hello")  # has escape codes
 
@@ -230,14 +230,14 @@ def test_row_out_of_range():
 
 def test_parse_row_out_of_range():
     with pytest.raises(IndexError):
-        parse_line(Buffer(10, 2), 5, "hello")
+        Buffer(10, 2).parse_line(5, "hello")
 
 
 # ── Non-CSI escapes don't hang ──────────────────────────────────────
 
 
 def test_osc_in_hstack_no_hang():
-    from ttyz.buffer import pad_columns
+    from ttyz.ext import pad_columns
 
     osc = "\033]8;;https://example.com\033\\click\033]8;;\033\\"
     result = pad_columns([osc], [10], 0)
@@ -246,14 +246,14 @@ def test_osc_in_hstack_no_hang():
 
 def test_osc_skipped_in_cells():
     buf = Buffer(20, 1)
-    parse_line(buf, 0, "\033]8;;http://x\033\\hi\033]8;;\033\\")
+    buf.parse_line(0, "\033]8;;http://x\033\\hi\033]8;;\033\\")
     text = buf.row_text(0)
     assert text.startswith("hi")
     assert "http" not in text
 
 
 def test_osc_in_display_width():
-    from ttyz.buffer import c_display_width
+    from ttyz.ext import display_width as c_display_width
 
     osc = "\033]8;;https://example.com\033\\click\033]8;;\033\\"
     assert c_display_width(osc) == 5
@@ -263,7 +263,7 @@ def test_osc_in_display_width():
 
 
 def test_hstack_ansi_clips_to_width():
-    from ttyz.buffer import pad_columns
+    from ttyz.ext import pad_columns
     from ttyz.measure import display_width, strip_ansi
 
     result = pad_columns([bold("hello world")], [5], 0)
@@ -271,7 +271,7 @@ def test_hstack_ansi_clips_to_width():
 
 
 def test_hstack_ansi_ascii_same_width():
-    from ttyz.buffer import pad_columns
+    from ttyz.ext import pad_columns
     from ttyz.measure import display_width, strip_ansi
 
     ascii_w = display_width(strip_ansi(pad_columns(["hello world"], [5], 0)))

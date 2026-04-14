@@ -11,8 +11,8 @@ Three render tiers (cheapest first):
 
 from __future__ import annotations
 
-from ttyz.buffer import flex_distribute, pad_columns, place_at_offsets
 from ttyz.components.base import Renderable, frame
+from ttyz.ext import flex_distribute, pad_columns, place_at_offsets
 from ttyz.measure import display_width, distribute
 from ttyz.screen import pad
 
@@ -206,10 +206,7 @@ def hstack(
                 for off, cw, content in flat_items:
                     if off > pos:
                         parts.append(" " * (off - pos))
-                    parts.append(content)
-                    gap = cw - display_width(content)
-                    if gap > 0:
-                        parts.append(" " * gap)
+                    parts.append(pad(content, cw))
                     pos = off + cw
                 return ["".join(parts)]
 
@@ -240,12 +237,10 @@ def hstack(
             if not act:
                 return [""] * h if h else [""]
             col_widths, remaining = _flex_distribute(act, w, spacing)
-            columns = [
-                c.render(w if c.width is not None else col_widths[i], h)
-                if c.grow
-                else c.render(w if c.width is not None else col_widths[i])
-                for i, c in enumerate(act)
-            ]
+            columns = []
+            for i, c in enumerate(act):
+                cw = w if c.width is not None else col_widths[i]
+                columns.append(c.render(cw, h) if c.grow else c.render(cw))
             return _join_rows(
                 columns,
                 col_widths,

@@ -1,8 +1,6 @@
 """Renderable dataclass and layout helpers.
 
 ``Renderable`` is the core type — a render function plus flex properties.
-Implemented as a C extension type (terminal.cbuf.Renderable) for fast
-creation and attribute access.
 
 ``frame`` wraps a Renderable with size constraints and background.
 
@@ -19,8 +17,40 @@ how remaining space is distributed among siblings in a flex container.
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
+from typing import TypeAlias
 
-from ttyz.buffer import Renderable
+RenderFn: TypeAlias = Callable[..., list[str]]
+
+
+class Renderable:
+    """Render function plus flex layout properties."""
+
+    __slots__ = (
+        "render",
+        "flex_basis",
+        "grow",
+        "width",
+        "height",
+        "flat_children",
+        "flat_spacing",
+    )
+
+    def __init__(
+        self,
+        render: RenderFn,
+        flex_basis: int = 0,
+        grow: int = 0,
+        width: str | None = None,
+        height: str | None = None,
+    ) -> None:
+        self.render = render
+        self.flex_basis = flex_basis
+        self.grow = grow
+        self.width = width
+        self.height = height
+        self.flat_children: tuple[Renderable, ...] | None = None
+        self.flat_spacing: int = 0
 
 
 def _clip_overflow(lines: list[str], width: int) -> list[str]:
