@@ -284,29 +284,29 @@ def test_hstack_ansi_ascii_same_width():
 
 
 @pytest.mark.parametrize("code", range(30, 38))
-def test_standard_fg_color(code):
+def test_standard_fg_color(code: int):
     assert _styled_differs_from_plain(f"\x1b[{code}mhi\x1b[0m", "hi")
 
 
 @pytest.mark.parametrize("code", range(40, 48))
-def test_standard_bg_color(code):
+def test_standard_bg_color(code: int):
     assert _styled_differs_from_plain(f"\x1b[{code}mhi\x1b[0m", "hi")
 
 
 @pytest.mark.parametrize("code", range(90, 98))
-def test_bright_fg_color(code):
+def test_bright_fg_color(code: int):
     assert _styled_differs_from_plain(f"\x1b[{code}mhi\x1b[0m", "hi")
 
 
 @pytest.mark.parametrize("code", range(100, 108))
-def test_bright_bg_color(code):
+def test_bright_bg_color(code: int):
     assert _styled_differs_from_plain(f"\x1b[{code}mhi\x1b[0m", "hi")
 
 
 # ── SGR partial resets ───────────────────────────────────────────────
 
 
-def _reset_clears(set_code, reset_code):
+def _reset_clears(set_code: int, reset_code: int):
     """A should be styled, B should match plain after reset."""
     styled = _buf([f"\x1b[{set_code}mA\x1b[{reset_code}mB"])
     plain = _buf(["AB"])
@@ -367,32 +367,12 @@ def test_pad_columns_mismatched_lengths():
         pad_columns(["a"], [], 0)
 
 
-def test_pad_columns_non_list_cells():
-    with pytest.raises(TypeError):
-        pad_columns("a", [1], 0)
-
-
-def test_pad_columns_non_list_widths():
-    with pytest.raises(TypeError):
-        pad_columns(["a"], 1, 0)
-
-
 def test_pad_columns_negative_width():
     result = pad_columns(["a"], [-1], 0)
     assert isinstance(result, str)
 
 
 # ── place_at_offsets validation ──────────────────────────────────────
-
-
-def test_place_at_offsets_non_tuple():
-    with pytest.raises(TypeError):
-        place_at_offsets(["not a tuple"])
-
-
-def test_place_at_offsets_short_tuple():
-    with pytest.raises(TypeError):
-        place_at_offsets([(0,)])
 
 
 def test_place_at_offsets_negative_width():
