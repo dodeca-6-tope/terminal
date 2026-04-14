@@ -9,6 +9,7 @@ from ttyz.cbuf import (
     Renderable,
     c_make_text,
     char_width,
+    distribute,
     hstack_join_row,
     parse_line,
     render_diff,
@@ -16,6 +17,9 @@ from ttyz.cbuf import (
     render_full,
     resolve_col_widths,
     set_text_render_fallback,
+    slice_at_width,
+    strip_ansi,
+    truncate,
 )
 from ttyz.cbuf import (
     display_width as c_display_width,
@@ -27,6 +31,7 @@ __all__ = [
     "c_display_width",
     "c_make_text",
     "char_width",
+    "distribute",
     "hstack_join_row",
     "parse_line",
     "render_diff",
@@ -34,4 +39,7 @@ __all__ = [
     "render_full",
     "resolve_col_widths",
     "set_text_render_fallback",
+    "slice_at_width",
+    "strip_ansi",
+    "truncate",
 ]

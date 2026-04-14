@@ -1202,6 +1202,385 @@ static PyObject *mod_resolve_col_widths(PyObject *self, PyObject *args) {
     return result;
 }
 
+/* ── distribute ───────────────────────────────────────────────────── */
+/*
+ * distribute(total, weights) -> list[int]
+ *
+ * Distribute total proportionally among weighted slots using cumulative
+ * rounding (Bresenham-style) to avoid fractional remainders.
+ */
+static PyObject *mod_distribute(PyObject *self, PyObject *args) {
+    int total;
+    PyObject *weights;
+    if (!PyArg_ParseTuple(args, "iO", &total, &weights))
+        return NULL;
+
+    if (!PyList_Check(weights)) {
+        PyErr_SetString(PyExc_TypeError, "weights must be a list");
+        return NULL;
+    }
+
+    Py_ssize_t n = PyList_GET_SIZE(weights);
+    if (n == 0)
+        return PyList_New(0);
+
+    /* Unbox weights once into a C array. */
+    long *wt = (long *)malloc((size_t)n * sizeof(long));
+    if (!wt) return PyErr_NoMemory();
+
+    long total_weight = 0;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        wt[i] = PyLong_AsLong(PyList_GET_ITEM(weights, i));
+        total_weight += wt[i];
+    }
+
+    PyObject *result = PyList_New(n);
+    if (!result) { free(wt); return NULL; }
+
+    if (total_weight == 0) {
+        for (Py_ssize_t i = 0; i < n; i++)
+            PyList_SET_ITEM(result, i, PyLong_FromLong(0));
+        free(wt);
+        return result;
+    }
+
+    long cum_weight = 0, cum_space = 0;
+    for (Py_ssize_t i = 0; i < n; i++) {
+        cum_weight += wt[i];
+        long target = (long)total * cum_weight / total_weight;
+        PyList_SET_ITEM(result, i, PyLong_FromLong(target - cum_space));
+        cum_space = target;
+    }
+    free(wt);
+    return result;
+}
+
+/* ── slice_at_width ──────────────────────────────────────────────── */
+/*
+ * slice_at_width(s, max_width) -> str
+ *
+ * Slice a plain (non-ANSI) string to fit within max_width display columns.
+ */
+static PyObject *mod_slice_at_width(PyObject *self, PyObject *args) {
+    PyObject *s;
+    int max_width;
+    if (!PyArg_ParseTuple(args, "Ui", &s, &max_width))
+        return NULL;
+
+    if (max_width <= 0)
+        return PyUnicode_FromStringAndSize("", 0);
+
+    Py_ssize_t len = PyUnicode_GET_LENGTH(s);
+
+    /* ASCII fast path: width == length. */
+    if (PyUnicode_IS_ASCII(s)) {
+        if (len <= max_width) {
+            Py_INCREF(s);
+            return s;
+        }
+        return PyUnicode_Substring(s, 0, max_width);
+    }
+
+    /* Wide-char scan. */
+    int kind = PyUnicode_KIND(s);
+    const void *data = PyUnicode_DATA(s);
+    int w = 0;
+    for (Py_ssize_t i = 0; i < len; i++) {
+        Py_UCS4 ch = PyUnicode_READ(kind, data, i);
+        int cw = cwidth(ch);
+        if (w + cw > max_width)
+            return PyUnicode_Substring(s, 0, i);
+        w += cw;
+    }
+    Py_INCREF(s);
+    return s;
+}
+
+/* ── strip_ansi ──────────────────────────────────────────────────── */
+/*
+ * strip_ansi(s) -> str
+ *
+ * Remove all escape sequences (CSI, OSC, etc.) from a string.
+ * Bulk-copies spans between escapes instead of encoding char-by-char.
+ */
+static PyObject *mod_strip_ansi(PyObject *self, PyObject *arg) {
+    if (!PyUnicode_Check(arg)) {
+        PyErr_SetString(PyExc_TypeError, "expected a string");
+        return NULL;
+    }
+
+    Py_ssize_t len = PyUnicode_GET_LENGTH(arg);
+
+    /* Fast: no ESC at all. */
+    if (PyUnicode_FindChar(arg, 0x1B, 0, len, 1) < 0) {
+        Py_INCREF(arg);
+        return arg;
+    }
+
+    /* ASCII fast path: work directly with bytes, bulk-copy spans. */
+    if (PyUnicode_IS_ASCII(arg)) {
+        const char *src = PyUnicode_AsUTF8(arg);
+        char *buf = (char *)malloc((size_t)len);
+        if (!buf) return PyErr_NoMemory();
+        Py_ssize_t out = 0;
+        Py_ssize_t pos = 0;
+        while (pos < len) {
+            /* Find next ESC. */
+            Py_ssize_t esc = pos;
+            while (esc < len && src[esc] != '\033') esc++;
+            /* Copy span before ESC. */
+            if (esc > pos) {
+                memcpy(buf + out, src + pos, (size_t)(esc - pos));
+                out += esc - pos;
+            }
+            if (esc >= len) break;
+            /* Skip escape sequence. */
+            if (esc + 1 < len && src[esc + 1] == '[') {
+                pos = esc + 2;
+                while (pos < len && !((unsigned char)src[pos] >= 0x40 &&
+                                      (unsigned char)src[pos] <= 0x7E))
+                    pos++;
+                if (pos < len) pos++; /* skip final byte */
+            } else {
+                pos = esc + 2; /* ESC + next byte */
+            }
+        }
+        PyObject *result = PyUnicode_FromStringAndSize(buf, out);
+        free(buf);
+        return result;
+    }
+
+    /* Non-ASCII: scan codepoints, bulk-copy via PyUnicode_Substring. */
+    int kind = PyUnicode_KIND(arg);
+    const void *data = PyUnicode_DATA(arg);
+
+    /* Count non-escape characters to size the output. */
+    Py_ssize_t out_len = 0;
+    for (Py_ssize_t pos = 0; pos < len; ) {
+        Py_UCS4 ch = PyUnicode_READ(kind, data, pos);
+        if (ch == 0x1B) {
+            pos = skip_escape(data, kind, pos, len);
+        } else {
+            out_len++;
+            pos++;
+        }
+    }
+
+    /* Build result by concatenating spans. */
+    Py_UCS4 maxchar = 0;
+    for (Py_ssize_t pos = 0; pos < len; ) {
+        Py_UCS4 ch = PyUnicode_READ(kind, data, pos);
+        if (ch == 0x1B) {
+            pos = skip_escape(data, kind, pos, len);
+        } else {
+            if (ch > maxchar) maxchar = ch;
+            pos++;
+        }
+    }
+
+    PyObject *result = PyUnicode_New(out_len, maxchar);
+    if (!result) return NULL;
+
+    int out_kind = PyUnicode_KIND(result);
+    void *out_data = PyUnicode_DATA(result);
+    Py_ssize_t out_pos = 0;
+    for (Py_ssize_t pos = 0; pos < len; ) {
+        Py_UCS4 ch = PyUnicode_READ(kind, data, pos);
+        if (ch == 0x1B) {
+            pos = skip_escape(data, kind, pos, len);
+        } else {
+            PyUnicode_WRITE(out_kind, out_data, out_pos++, ch);
+            pos++;
+        }
+    }
+
+    return result;
+}
+
+/* ── truncate ────────────────────────────────────────────────────── */
+/*
+ * truncate(s, max_width, ellipsis=False) -> str
+ *
+ * Truncate a string to max_width visible characters.
+ * If ellipsis is true and the string is truncated, append "…".
+ * Single-pass: scans characters and stops as soon as the budget is hit,
+ * never measuring the full string when truncation is needed.
+ */
+static PyObject *mod_truncate(PyObject *self, PyObject *args, PyObject *kw) {
+    PyObject *s;
+    int max_width;
+    int ellipsis = 0;
+    static char *kwlist[] = {"s", "max_width", "ellipsis", NULL};
+    if (!PyArg_ParseTupleAndKeywords(args, kw, "Ui|p", kwlist,
+                                      &s, &max_width, &ellipsis))
+        return NULL;
+
+    if (max_width <= 0)
+        return PyUnicode_FromStringAndSize("", 0);
+
+    Py_ssize_t len = PyUnicode_GET_LENGTH(s);
+    int has_esc = (PyUnicode_FindChar(s, 0x1B, 0, len, 1) >= 0);
+
+    /* ── No escapes: single-pass scan + truncate ──────────────── */
+    if (!has_esc) {
+        /* ASCII: width == length, no scan needed. */
+        if (PyUnicode_IS_ASCII(s)) {
+            if (len <= max_width) {
+                Py_INCREF(s);
+                return s;
+            }
+            int target = ellipsis ? max_width - 1 : max_width;
+            if (target <= 0)
+                return PyUnicode_FromStringAndSize("", 0);
+            const char *src = PyUnicode_AsUTF8(s);
+            if (ellipsis) {
+                /* Build "head…" in one buffer. */
+                char *buf = (char *)malloc((size_t)target + 3);
+                if (!buf) return PyErr_NoMemory();
+                memcpy(buf, src, (size_t)target);
+                memcpy(buf + target, "\xe2\x80\xa6", 3);
+                PyObject *result = PyUnicode_FromStringAndSize(buf, target + 3);
+                free(buf);
+                return result;
+            }
+            return PyUnicode_FromStringAndSize(src, target);
+        }
+
+        /* Non-ASCII, no escapes: single-pass width scan.
+           We scan up to max_width visible columns. If we reach the end
+           of the string within budget, return it unchanged. Otherwise
+           truncate at the overflow point. */
+        int kind = PyUnicode_KIND(s);
+        const void *data = PyUnicode_DATA(s);
+        int target = ellipsis ? max_width - 1 : max_width;
+        int w = 0;
+        Py_ssize_t cut = -1; /* position where we'd cut for truncation */
+        for (Py_ssize_t i = 0; i < len; i++) {
+            int cw = cwidth(PyUnicode_READ(kind, data, i));
+            if (cut < 0 && w + cw > target)
+                cut = i;
+            if (w + cw > max_width) {
+                /* Definitely needs truncation — cut was already set. */
+                if (target <= 0)
+                    return PyUnicode_FromStringAndSize("", 0);
+                PyObject *head = PyUnicode_Substring(s, 0, cut);
+                if (!head) return NULL;
+                if (!ellipsis) return head;
+                PyObject *ell = PyUnicode_FromString("\xe2\x80\xa6");
+                if (!ell) { Py_DECREF(head); return NULL; }
+                PyObject *result = PyUnicode_Concat(head, ell);
+                Py_DECREF(head);
+                Py_DECREF(ell);
+                return result;
+            }
+            w += cw;
+        }
+        /* Fits within max_width. */
+        Py_INCREF(s);
+        return s;
+    }
+
+    /* ── ANSI path: single-pass clip, preserve escapes ────────── */
+    int kind = PyUnicode_KIND(s);
+    const void *data = PyUnicode_DATA(s);
+    int target = ellipsis ? max_width - 1 : max_width;
+
+    /* First check if total visible width fits — but bail early. */
+    int vis = 0;
+    int needs_trunc = 0;
+    for (Py_ssize_t pos = 0; pos < len; ) {
+        Py_UCS4 ch = PyUnicode_READ(kind, data, pos);
+        if (ch == 0x1B) {
+            pos = skip_escape(data, kind, pos, len);
+        } else {
+            vis += cwidth(ch);
+            if (vis > max_width) { needs_trunc = 1; break; }
+            pos++;
+        }
+    }
+    if (!needs_trunc) {
+        Py_INCREF(s);
+        return s;
+    }
+
+    if (target <= 0)
+        return PyUnicode_FromStringAndSize("", 0);
+
+    /* ASCII ANSI fast path: bulk-copy spans between escapes. */
+    if (PyUnicode_IS_ASCII(s)) {
+        const char *src = PyUnicode_AsUTF8(s);
+        /* Worst case: full input + reset + ellipsis. */
+        char *buf = (char *)malloc((size_t)len + 7);
+        if (!buf) return PyErr_NoMemory();
+        Py_ssize_t out = 0;
+        int w = 0;
+        Py_ssize_t pos = 0;
+        while (pos < len) {
+            if (src[pos] == '\033') {
+                /* Copy escape verbatim. */
+                Py_ssize_t esc_start = pos;
+                if (pos + 1 < len && src[pos + 1] == '[') {
+                    pos += 2;
+                    while (pos < len && !((unsigned char)src[pos] >= 0x40 &&
+                                          (unsigned char)src[pos] <= 0x7E))
+                        pos++;
+                    if (pos < len) pos++;
+                } else {
+                    pos += 2;
+                }
+                memcpy(buf + out, src + esc_start, (size_t)(pos - esc_start));
+                out += pos - esc_start;
+            } else {
+                /* ASCII: cwidth == 1 for printable. */
+                if (w + 1 > target) break;
+                buf[out++] = src[pos++];
+                w++;
+            }
+        }
+        memcpy(buf + out, "\033[0m", 4);
+        out += 4;
+        if (ellipsis) {
+            memcpy(buf + out, "\xe2\x80\xa6", 3);
+            out += 3;
+        }
+        PyObject *result = PyUnicode_DecodeUTF8(buf, out, NULL);
+        free(buf);
+        return result;
+    }
+
+    /* Non-ASCII ANSI: OutBuf path. */
+    OutBuf ob;
+    if (outbuf_init(&ob, (size_t)len) < 0)
+        return PyErr_NoMemory();
+
+    int w = 0;
+    for (Py_ssize_t pos = 0; pos < len; ) {
+        Py_UCS4 ch = PyUnicode_READ(kind, data, pos);
+        if (ch == 0x1B) {
+            Py_ssize_t end = skip_escape(data, kind, pos, len);
+            for (Py_ssize_t k = pos; k < end; k++) {
+                char u8[4];
+                Py_UCS4 ec = PyUnicode_READ(kind, data, k);
+                outbuf_add(&ob, u8, (size_t)encode_utf8(ec, u8));
+            }
+            pos = end;
+        } else {
+            int cw = cwidth(ch);
+            if (w + cw > target) break;
+            char u8[4];
+            outbuf_add(&ob, u8, (size_t)encode_utf8(ch, u8));
+            w += cw;
+            pos++;
+        }
+    }
+
+    outbuf_add(&ob, "\033[0m", 4);
+    if (ellipsis)
+        outbuf_add(&ob, "\xe2\x80\xa6", 3);
+
+    return outbuf_to_pystr(&ob);
+}
+
 /* ── Module definition ─────────────────────────────────────────────── */
 
 static PyMethodDef module_methods[] = {
@@ -1215,6 +1594,10 @@ static PyMethodDef module_methods[] = {
     {"resolve_col_widths", mod_resolve_col_widths, METH_VARARGS, "Resolve flex column widths in one shot."},
     {"c_make_text", mod_c_make_text, METH_VARARGS, "Create a TextRender + parse lines + measure width."},
     {"set_text_render_fallback", mod_set_text_render_fallback, METH_O, "Set Python fallback for text full render."},
+    {"distribute",      mod_distribute,      METH_VARARGS,                "Distribute total proportionally among weights."},
+    {"slice_at_width",  mod_slice_at_width,  METH_VARARGS,                "Slice plain string to fit display width."},
+    {"strip_ansi",      mod_strip_ansi,      METH_O,                      "Remove ANSI escape sequences from string."},
+    {"truncate",        (PyCFunction)mod_truncate, METH_VARARGS | METH_KEYWORDS, "Truncate string to max visible width."},
     {NULL}
 };
 
