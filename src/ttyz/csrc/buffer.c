@@ -46,7 +46,11 @@ static int Buffer_init(BufferObject *self, PyObject *args, PyObject *kw) {
     self->height = h;
     self->cells = (Cell *)malloc(n * sizeof(Cell));
     if (!self->cells) { PyErr_NoMemory(); return -1; }
-    for (size_t i = 0; i < n; i++) self->cells[i] = BLANK_CELL;
+    /* Fill first row, then memcpy to remaining rows. */
+    for (int c = 0; c < w; c++) self->cells[c] = BLANK_CELL;
+    for (int r = 1; r < h; r++)
+        memcpy(self->cells + (size_t)r * (size_t)w,
+               self->cells, (size_t)w * sizeof(Cell));
     self->extras = NULL;
     self->extras_count = 0;
     self->extras_cap = 0;

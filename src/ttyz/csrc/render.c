@@ -89,6 +89,55 @@ static PyObject *s_normal;
 static PyObject *s_double;
 static PyObject *s_heavy;
 
+/* ── Slot offsets (discovered at init time) ────────────────────────── */
+/*
+ * CPython stores __slots__ values at fixed offsets inside instances.
+ * We discover the offsets once from the member descriptors, then read
+ * slot values directly, bypassing the descriptor protocol entirely.
+ * This eliminates the dominant per-node cost: PyObject_GetAttr calls
+ * that perform MRO lookup + descriptor __get__ on every access.
+ */
+
+/* Node base (same offset for every subclass). */
+static Py_ssize_t off_children, off_grow, off_width, off_height,
+                   off_bg, off_overflow;
+/* Text */
+static Py_ssize_t off_text_value, off_text_lines, off_text_visible_w,
+                   off_text_pl, off_text_pr, off_text_truncation,
+                   off_text_wrap;
+/* HStack */
+static Py_ssize_t off_hstack_spacing, off_hstack_jc, off_hstack_ai,
+                   off_hstack_wrap;
+/* VStack */
+static Py_ssize_t off_vstack_spacing, off_vstack_has_flex;
+/* ZStack */
+static Py_ssize_t off_zstack_jc, off_zstack_ai;
+/* Box */
+static Py_ssize_t off_box_style, off_box_title, off_box_padding;
+/* Scroll */
+static Py_ssize_t off_scroll_state;
+/* Spacer */
+static Py_ssize_t off_spacer_min_length;
+/* Input */
+static Py_ssize_t off_input_buffer, off_input_active, off_input_placeholder;
+/* Scrollbar */
+static Py_ssize_t off_scrollbar_state, off_scrollbar_render_fn;
+/* ListView */
+static Py_ssize_t off_list_render_fn, off_list_cache;
+
+/* Read a slot as a borrowed PyObject* (no DECREF needed). */
+#define SLOT(obj, offset)  (*(PyObject **)((char *)(obj) + (offset)))
+
+/* Read a slot that holds a Python int, returning a C int. */
+static inline int slot_int(PyObject *obj, Py_ssize_t offset) {
+    return (int)PyLong_AsLong(SLOT(obj, offset));
+}
+
+/* Read a slot that holds a Python bool, returning a C int. */
+static inline int slot_bool(PyObject *obj, Py_ssize_t offset) {
+    return SLOT(obj, offset) == Py_True;
+}
+
 /* Forward declarations. */
 static PyObject *text_get_lines(PyObject *node);
 static int text_visible_w(PyObject *node);
@@ -98,6 +147,32 @@ static PyObject *py_display_text;
 static PyObject *py_display_cursor;
 
 /* ── init_render_types — lazy one-time setup ──────────────────────── */
+
+/*
+ * Discover the memory offset of a __slots__ attribute on a type.
+ * Walks the MRO to find the member_descriptor, then reads its offset.
+ * Returns -1 on failure (sets a Python exception).
+ */
+static Py_ssize_t discover_slot_offset(PyTypeObject *tp, const char *name) {
+    PyObject *key = PyUnicode_InternFromString(name);
+    if (!key) return -1;
+    PyObject *mro = tp->tp_mro;
+    Py_ssize_t n = PyTuple_GET_SIZE(mro);
+    for (Py_ssize_t i = 0; i < n; i++) {
+        PyTypeObject *base = (PyTypeObject *)PyTuple_GET_ITEM(mro, i);
+        if (!base->tp_dict) continue;
+        PyObject *descr = PyDict_GetItem(base->tp_dict, key); /* borrowed */
+        if (descr && Py_TYPE(descr) == &PyMemberDescr_Type) {
+            Py_DECREF(key);
+            return ((PyMemberDescrObject *)descr)->d_member->offset;
+        }
+    }
+    PyErr_Format(PyExc_RuntimeError,
+                 "ttyz: slot '%s' not found on type '%s'",
+                 name, tp->tp_name);
+    Py_DECREF(key);
+    return -1;
+}
 
 static PyTypeObject *load_type(const char *module, const char *name) {
     PyObject *mod = PyImport_ImportModule(module);
@@ -194,6 +269,58 @@ static int init_render_types(void) {
     Py_DECREF(imod);
     if (!py_display_text || !py_display_cursor) return -1;
 
+    /* ── Discover slot offsets ───────────────────────────────────── */
+#define OFF(var, tp, name) do {                   \
+    var = discover_slot_offset(tp, name);         \
+    if (var < 0) return -1;                       \
+} while (0)
+
+    /* Node base — shared by all subclasses. */
+    OFF(off_children,   NodeType_,     "children");
+    OFF(off_grow,       NodeType_,     "grow");
+    OFF(off_width,      NodeType_,     "width");
+    OFF(off_height,     NodeType_,     "height");
+    OFF(off_bg,         NodeType_,     "bg");
+    OFF(off_overflow,   NodeType_,     "overflow");
+    /* Text */
+    OFF(off_text_value,     TextType_,    "value");
+    OFF(off_text_lines,     TextType_,    "_lines");
+    OFF(off_text_visible_w, TextType_,    "_visible_w");
+    OFF(off_text_pl,        TextType_,    "pl");
+    OFF(off_text_pr,        TextType_,    "pr");
+    OFF(off_text_truncation,TextType_,    "truncation");
+    OFF(off_text_wrap,      TextType_,    "wrap");
+    /* HStack */
+    OFF(off_hstack_spacing, HStackType_,  "spacing");
+    OFF(off_hstack_jc,      HStackType_,  "justify_content");
+    OFF(off_hstack_ai,      HStackType_,  "align_items");
+    OFF(off_hstack_wrap,    HStackType_,  "wrap");
+    /* VStack */
+    OFF(off_vstack_spacing,  VStackType_,  "spacing");
+    OFF(off_vstack_has_flex, VStackType_,  "has_flex");
+    /* ZStack */
+    OFF(off_zstack_jc,      ZStackType_,  "justify_content");
+    OFF(off_zstack_ai,      ZStackType_,  "align_items");
+    /* Box */
+    OFF(off_box_style,      BoxType_,     "style");
+    OFF(off_box_title,      BoxType_,     "title");
+    OFF(off_box_padding,    BoxType_,     "padding");
+    /* Scroll */
+    OFF(off_scroll_state,   ScrollType_,  "state");
+    /* Spacer */
+    OFF(off_spacer_min_length, SpacerType_, "min_length");
+    /* Input */
+    OFF(off_input_buffer,      InputType_,     "buffer");
+    OFF(off_input_active,      InputType_,     "active");
+    OFF(off_input_placeholder, InputType_,     "placeholder");
+    /* Scrollbar */
+    OFF(off_scrollbar_state,     ScrollbarType_, "state");
+    OFF(off_scrollbar_render_fn, ScrollbarType_, "render_fn");
+    /* ListView */
+    OFF(off_list_render_fn, ListViewType_, "render_fn");
+    OFF(off_list_cache,     ListViewType_, "cache");
+#undef OFF
+
     render_types_ready = 1;
     return 0;
 }
@@ -223,12 +350,15 @@ static void rc_fill_region(BufferObject *buf, int x, int y, int w, int h,
     if (y < 0) y = 0;
     if (x1 > buf->width)  x1 = buf->width;
     if (y1 > buf->height) y1 = buf->height;
+    int rw = x1 - x;
+    if (rw <= 0 || y >= y1) return;
     Cell cell = {' ', style};
-    for (int r = y; r < y1; r++) {
-        Cell *row = buf->cells + r * buf->width;
-        for (int c = x; c < x1; c++)
-            row[c] = cell;
-    }
+    /* Fill first row, memcpy to rest. */
+    Cell *first = buf->cells + y * buf->width + x;
+    for (int c = 0; c < rw; c++) first[c] = cell;
+    size_t row_bytes = (size_t)rw * sizeof(Cell);
+    for (int r = y + 1; r < y1; r++)
+        memcpy(buf->cells + r * buf->width + x, first, row_bytes);
 }
 
 /* Fill only UNWRITTEN cells in a region — used after rendering content
@@ -422,9 +552,8 @@ static int c_measure_node(RenderCtx *ctx, PyObject *node) {
     int result = 0;
     PyTypeObject *tp = Py_TYPE(node);
 
-    /* Check explicit non-percentage width first. */
-    PyObject *node_w = PyObject_GetAttr(node, a_width);
-    if (!node_w) return -1;
+    /* Check explicit non-percentage width first (direct slot). */
+    PyObject *node_w = SLOT(node, off_width);
     if (node_w != Py_None) {
         Py_ssize_t wlen = PyUnicode_GET_LENGTH(node_w);
         if (wlen > 0) {
@@ -435,58 +564,46 @@ static int c_measure_node(RenderCtx *ctx, PyObject *node) {
                 for (Py_ssize_t i = 0; i < wlen; i++)
                     result = result * 10 +
                              (int)(PyUnicode_READ(kind, data, i) - '0');
-                Py_DECREF(node_w);
                 goto cache;
             }
         }
     }
-    Py_DECREF(node_w);
 
     if (tp == TextType_) {
-        result = text_visible_w(node) + rc_int_attr(node, a_pl, 0) + rc_int_attr(node, a_pr, 0);
+        result = text_visible_w(node) + slot_int(node, off_text_pl) +
+                 slot_int(node, off_text_pr);
     }
     else if (tp == SpacerType_) {
-        result = rc_int_attr(node, a_min_length, 0);
+        result = slot_int(node, off_spacer_min_length);
     }
     else if (tp == HStackType_) {
-        /* sum of children + spacing */
-        PyObject *children = PyObject_GetAttr(node, a_children);
-        if (!children) return -1;
-        int sp = rc_int_attr(node, a_spacing, 0);
+        PyObject *children = SLOT(node, off_children);
+        int sp = slot_int(node, off_hstack_spacing);
         Py_ssize_t n = PyTuple_GET_SIZE(children);
         int count = 0;
         for (Py_ssize_t i = 0; i < n; i++) {
             PyObject *c = PyTuple_GET_ITEM(children, i);
             int cw = c_measure_node(ctx, c);
-            if (cw < 0) { Py_DECREF(children); return -1; }
-            PyObject *cg = PyObject_GetAttr(c, a_grow);
-            int g = cg ? (int)PyLong_AsLong(cg) : 0;
-            Py_XDECREF(cg);
-            PyObject *cwid = PyObject_GetAttr(c, a_width);
-            int has_w = (cwid && cwid != Py_None);
-            Py_XDECREF(cwid);
+            if (cw < 0) return -1;
+            int g = slot_int(c, off_grow);
+            int has_w = (SLOT(c, off_width) != Py_None);
             if (cw > 0 || g || has_w) { result += cw; count++; }
         }
         if (count > 1) result += sp * (count - 1);
-        Py_DECREF(children);
     }
     else if (tp == BoxType_) {
-        PyObject *children = PyObject_GetAttr(node, a_children);
-        if (!children) return -1;
-        int pad = rc_int_attr(node, a_padding, 0);
+        PyObject *children = SLOT(node, off_children);
+        int pad = slot_int(node, off_box_padding);
         if (PyTuple_GET_SIZE(children) > 0) {
             int cw = c_measure_node(ctx, PyTuple_GET_ITEM(children, 0));
-            if (cw < 0) { Py_DECREF(children); return -1; }
+            if (cw < 0) return -1;
             int content_w = cw + pad * 2;
             int title_w = 0;
-            PyObject *title = PyObject_GetAttr(node, a_title);
-            if (title && PyUnicode_Check(title) &&
-                PyUnicode_GET_LENGTH(title) > 0)
+            PyObject *title = SLOT(node, off_box_title);
+            if (PyUnicode_Check(title) && PyUnicode_GET_LENGTH(title) > 0)
                 title_w = str_display_width(title) + 2;
-            Py_XDECREF(title);
             result = (content_w > title_w ? content_w : title_w) + 2;
         }
-        Py_DECREF(children);
     }
     else if (tp == TableType_) {
         PyObject *rows = PyObject_GetAttr(node, a_rows);
@@ -495,7 +612,6 @@ static int c_measure_node(RenderCtx *ctx, PyObject *node) {
             int spacing = rc_int_attr(node, a_spacing, 0);
             int num_cols = 0;
             Py_ssize_t nr = PyList_GET_SIZE(rows);
-            /* Find max column count. */
             for (Py_ssize_t r = 0; r < nr; r++) {
                 PyObject *cells = PyObject_GetAttr(
                     PyList_GET_ITEM(rows, r), a_cells);
@@ -505,7 +621,6 @@ static int c_measure_node(RenderCtx *ctx, PyObject *node) {
                     Py_DECREF(cells);
                 }
             }
-            /* Max width per column. */
             int cw[256];
             for (int i = 0; i < 256; i++) cw[i] = 0;
             for (Py_ssize_t r = 0; r < nr; r++) {
@@ -529,44 +644,36 @@ static int c_measure_node(RenderCtx *ctx, PyObject *node) {
         Py_DECREF(rows);
     }
     else if (tp == InputType_) {
-        PyObject *buf = PyObject_GetAttr(node, a_buffer);
-        if (buf) {
-            PyObject *val = PyObject_GetAttr(buf, a_value);
-            if (val && PyUnicode_Check(val) && PyUnicode_GET_LENGTH(val) > 0) {
-                result = str_display_width(val);
-                if (rc_bool_attr(node, a_active, 0)) result++;
-            } else {
-                PyObject *ph = PyObject_GetAttr(node, a_placeholder);
-                result = (ph && PyUnicode_Check(ph))
-                         ? (int)PyUnicode_GET_LENGTH(ph) : 0;
-                Py_XDECREF(ph);
-            }
-            Py_XDECREF(val);
-            Py_DECREF(buf);
+        PyObject *buf = SLOT(node, off_input_buffer);
+        PyObject *val = PyObject_GetAttr(buf, a_value);
+        if (val && PyUnicode_Check(val) && PyUnicode_GET_LENGTH(val) > 0) {
+            result = str_display_width(val);
+            if (slot_bool(node, off_input_active)) result++;
+        } else {
+            PyObject *ph = SLOT(node, off_input_placeholder);
+            result = (ph && PyUnicode_Check(ph))
+                     ? (int)PyUnicode_GET_LENGTH(ph) : 0;
         }
+        Py_XDECREF(val);
     }
     else if (tp == ScrollbarType_) {
         result = 1;
     }
     else if (tp == CondType_) {
-        PyObject *children = PyObject_GetAttr(node, a_children);
-        if (!children) return -1;
+        PyObject *children = SLOT(node, off_children);
         if (PyTuple_GET_SIZE(children) > 0)
             result = c_measure_node(ctx, PyTuple_GET_ITEM(children, 0));
-        Py_DECREF(children);
     }
     else {
         /* VStack, ZStack, Scroll, Foreach, others: max of children. */
-        PyObject *children = PyObject_GetAttr(node, a_children);
-        if (!children) return -1;
+        PyObject *children = SLOT(node, off_children);
         Py_ssize_t n = PyTuple_GET_SIZE(children);
         for (Py_ssize_t i = 0; i < n; i++) {
             int cw = c_measure_node(ctx,
                                     PyTuple_GET_ITEM(children, i));
-            if (cw < 0) { Py_DECREF(children); return -1; }
+            if (cw < 0) return -1;
             if (cw > result) result = cw;
         }
-        Py_DECREF(children);
     }
 
 cache:
@@ -587,13 +694,14 @@ cache:
  * on first access.  Returns a borrowed reference.
  */
 static PyObject *text_get_lines(PyObject *node) {
-    PyObject *cached = PyObject_GetAttr(node, a__lines);
-    if (cached && cached != Py_None) return cached; /* caller must DECREF */
-    Py_XDECREF(cached);
-    PyErr_Clear();
+    PyObject *cached = SLOT(node, off_text_lines);
+    if (cached && cached != Py_None) {
+        Py_INCREF(cached);
+        return cached; /* caller must DECREF */
+    }
 
-    PyObject *val = PyObject_GetAttr(node, a_value);
-    if (!val) return NULL;
+    PyObject *val = SLOT(node, off_text_value);
+    Py_INCREF(val);
 
     Py_ssize_t len = PyUnicode_GET_LENGTH(val);
     PyObject *lines;
@@ -620,32 +728,31 @@ static PyObject *text_get_lines(PyObject *node) {
         int lw = str_display_width(PyList_GET_ITEM(lines, i));
         if (lw > visible_w) visible_w = lw;
     }
-    PyObject *vw = PyLong_FromLong(visible_w);
-    if (vw) { PyObject_SetAttr(node, a__visible_w, vw); Py_DECREF(vw); }
+    /* Cache directly into slots — faster than PyObject_SetAttr. */
+    PyObject *vw_obj = PyLong_FromLong(visible_w);
+    if (vw_obj) {
+        PyObject **vw_slot = (PyObject **)((char *)node + off_text_visible_w);
+        Py_XDECREF(*vw_slot);
+        *vw_slot = vw_obj;
+    }
+    PyObject **lines_slot = (PyObject **)((char *)node + off_text_lines);
+    Py_XDECREF(*lines_slot);
+    Py_INCREF(lines);
+    *lines_slot = lines;
 
-    /* Cache lines on node. */
-    PyObject_SetAttr(node, a__lines, lines);
     return lines; /* caller must DECREF */
 }
 
 static int text_visible_w(PyObject *node) {
-    PyObject *vw = PyObject_GetAttr(node, a__visible_w);
-    if (vw && vw != Py_None) {
-        int result = (int)PyLong_AsLong(vw);
-        Py_DECREF(vw);
-        return result;
-    }
-    Py_XDECREF(vw);
-    PyErr_Clear();
+    PyObject *vw = SLOT(node, off_text_visible_w);
+    if (vw && vw != Py_None)
+        return (int)PyLong_AsLong(vw);
     /* Force parse to populate cache. */
     PyObject *lines = text_get_lines(node);
     if (!lines) return 0;
     Py_DECREF(lines);
-    vw = PyObject_GetAttr(node, a__visible_w);
-    if (!vw) return 0;
-    int result = (int)PyLong_AsLong(vw);
-    Py_DECREF(vw);
-    return result;
+    vw = SLOT(node, off_text_visible_w);
+    return vw ? (int)PyLong_AsLong(vw) : 0;
 }
 
 /* ── Type-specific renderers ──────────────────────────────────────── */
@@ -657,18 +764,17 @@ static int render_text(RenderCtx *ctx, PyObject *node,
     PyObject *lines = text_get_lines(node);
     if (!lines) return -1;
 
-    int pl = rc_int_attr(node, a_pl, 0);
-    int pr = rc_int_attr(node, a_pr, 0);
+    int pl = slot_int(node, off_text_pl);
+    int pr = slot_int(node, off_text_pr);
     int inner_x = x + pl;
     int inner_w = w - pl - pr;
     if (inner_w < 0) inner_w = 0;
 
     int has_pad = (pl > 0 || pr > 0);
 
-    /* Check wrap / truncation. */
-    int do_wrap = rc_bool_attr(node, a_wrap, 0);
-    PyObject *trunc_obj = PyObject_GetAttr(node, a_truncation);
-    if (!trunc_obj) { Py_DECREF(lines); return -1; }
+    /* Check wrap / truncation (direct slot). */
+    int do_wrap = slot_bool(node, off_text_wrap);
+    PyObject *trunc_obj = SLOT(node, off_text_truncation); /* borrowed */
     const char *tmode = (trunc_obj != Py_None)
         ? PyUnicode_AsUTF8(trunc_obj) : NULL;
 
@@ -740,12 +846,10 @@ static int render_text(RenderCtx *ctx, PyObject *node,
         }
     }
 
-    Py_DECREF(trunc_obj);
     Py_DECREF(lines);
     return rows;
 
 error:
-    Py_DECREF(trunc_obj);
     Py_DECREF(lines);
     return -1;
 }
@@ -754,14 +858,13 @@ error:
 
 static int render_vstack(RenderCtx *ctx, PyObject *node,
                          int x, int y, int w, int h, Style bg) {
-    PyObject *children = PyObject_GetAttr(node, a_children);
-    if (!children) return -1;
+    PyObject *children = SLOT(node, off_children); /* borrowed */
     Py_ssize_t n = PyTuple_GET_SIZE(children);
-    if (n == 0) { Py_DECREF(children); return 0; }
+    if (n == 0) return 0;
 
-    int spacing = rc_int_attr(node, a_spacing, 0);
+    int spacing = slot_int(node, off_vstack_spacing);
 
-    int has_flex = (h >= 0) ? rc_bool_attr(node, a_has_flex, 0) : 0;
+    int has_flex = (h >= 0) ? slot_bool(node, off_vstack_has_flex) : 0;
 
     if (!has_flex) {
         /* No flex — render children unconstrained, clip total at h.
@@ -775,19 +878,16 @@ static int render_vstack(RenderCtx *ctx, PyObject *node,
                 rows += spacing;
             }
             PyObject *child = PyTuple_GET_ITEM(children, i);
-            int cr = c_render_node(ctx, child, x, y + rows, w,
-                                   -1, bg);
-            if (cr < 0) { Py_DECREF(children); return -1; }
+            int cr = c_render_node(ctx, child, x, y + rows, w, -1, bg);
+            if (cr < 0) return -1;
             rows += cr;
         }
-        Py_DECREF(children);
         return rows;
     }
 
     /* ── Flex layout: two passes. ────────────────────────────────── */
-    /* Pass 1: measure non-grow children, collect grow items. */
     int *child_h = (int *)calloc((size_t)n, sizeof(int));
-    if (!child_h) { Py_DECREF(children); return (PyErr_NoMemory(), -1); }
+    if (!child_h) return (PyErr_NoMemory(), -1);
 
     int used = spacing * (int)(n > 1 ? n - 1 : 0);
     int grow_idx[256], grow_wt[256];
@@ -795,32 +895,27 @@ static int render_vstack(RenderCtx *ctx, PyObject *node,
 
     for (Py_ssize_t i = 0; i < n; i++) {
         PyObject *child = PyTuple_GET_ITEM(children, i);
-        int g = rc_int_attr(child, a_grow, 0);
-        PyObject *ch_obj = PyObject_GetAttr(child, a_height);
-        int has_h = (ch_obj && ch_obj != Py_None);
-        Py_XDECREF(ch_obj);
+        int g = slot_int(child, off_grow);
+        int has_h = (SLOT(child, off_height) != Py_None);
 
         if (g && !has_h) {
-            /* Grow child — height assigned in pass 2. */
             child_h[i] = -1;
             if (ng >= 256) {
                 PyErr_SetString(PyExc_OverflowError,
                                 "VStack: too many grow children (max 256)");
-                free(child_h); Py_DECREF(children); return -1;
+                free(child_h); return -1;
             }
             grow_idx[ng] = (int)i; grow_wt[ng] = g; ng++;
         } else {
-            /* Fixed child — dry-run off-screen to measure height. */
             int offscreen = ctx->buf->height;
             int ch = has_h ? h : -1;
             int cr = c_render_node(ctx, child, x, offscreen, w, ch, bg);
-            if (cr < 0) { free(child_h); Py_DECREF(children); return -1; }
+            if (cr < 0) { free(child_h); return -1; }
             child_h[i] = cr;
             used += cr;
         }
     }
 
-    /* Distribute remaining space among grow items. */
     int remaining = h - used;
     if (remaining < 0) remaining = 0;
     if (ng > 0) {
@@ -840,28 +935,23 @@ static int render_vstack(RenderCtx *ctx, PyObject *node,
     for (Py_ssize_t i = 0; i < n; i++) {
         if (i > 0 && spacing) row += spacing;
         PyObject *child = PyTuple_GET_ITEM(children, i);
-        int g = rc_int_attr(child, a_grow, 0);
-        PyObject *ch_obj = PyObject_GetAttr(child, a_height);
-        int has_h = (ch_obj && ch_obj != Py_None);
-        Py_XDECREF(ch_obj);
+        int g = slot_int(child, off_grow);
+        int has_h = (SLOT(child, off_height) != Py_None);
 
         if (g && !has_h) {
-            /* Grow child — render with assigned height. */
             int cr = c_render_node(ctx, child, x, y + row, w,
                                    child_h[i], bg);
-            if (cr < 0) { free(child_h); Py_DECREF(children); return -1; }
-            row += child_h[i];  /* use allocated height for layout */
+            if (cr < 0) { free(child_h); return -1; }
+            row += child_h[i];
         } else {
-            /* Fixed child — re-render at correct position. */
             int cr = c_render_node(ctx, child, x, y + row, w,
                                    has_h ? h : -1, bg);
-            if (cr < 0) { free(child_h); Py_DECREF(children); return -1; }
+            if (cr < 0) { free(child_h); return -1; }
             row += child_h[i] >= 0 ? child_h[i] : cr;
         }
     }
 
     free(child_h);
-    Py_DECREF(children);
     return row;
 }
 
@@ -869,8 +959,7 @@ static int render_vstack(RenderCtx *ctx, PyObject *node,
 
 static int render_foreach(RenderCtx *ctx, PyObject *node,
                           int x, int y, int w, int h, Style bg) {
-    PyObject *children = PyObject_GetAttr(node, a_children);
-    if (!children) return -1;
+    PyObject *children = SLOT(node, off_children);
     Py_ssize_t n = PyTuple_GET_SIZE(children);
 
     int rows = 0;
@@ -879,11 +968,10 @@ static int render_foreach(RenderCtx *ctx, PyObject *node,
         int remaining = (h >= 0) ? h - rows : -1;
         int cr = c_render_node(ctx, PyTuple_GET_ITEM(children, i),
                                x, y + rows, w, remaining, bg);
-        if (cr < 0) { Py_DECREF(children); return -1; }
+        if (cr < 0) return -1;
         rows += cr;
     }
 
-    Py_DECREF(children);
     return rows;
 }
 
@@ -891,15 +979,11 @@ static int render_foreach(RenderCtx *ctx, PyObject *node,
 
 static int render_cond(RenderCtx *ctx, PyObject *node,
                        int x, int y, int w, int h, Style bg) {
-    PyObject *children = PyObject_GetAttr(node, a_children);
-    if (!children) return -1;
-    if (PyTuple_GET_SIZE(children) == 0) {
-        Py_DECREF(children);
+    PyObject *children = SLOT(node, off_children);
+    if (PyTuple_GET_SIZE(children) == 0)
         return 0;
-    }
-    PyObject *child = PyTuple_GET_ITEM(children, 0);
-    Py_DECREF(children);
-    return c_render_node(ctx, child, x, y, w, h, bg);
+    return c_render_node(ctx, PyTuple_GET_ITEM(children, 0),
+                         x, y, w, h, bg);
 }
 
 /* ── Spacer ───────────────────────────────────────────────────────── */
@@ -924,16 +1008,15 @@ static int flex_dist(RenderCtx *ctx, PyObject **act, int n,
 
     for (int i = 0; i < n; i++) {
         PyObject *c = act[i];
-        PyObject *cwid = PyObject_GetAttr(c, a_width);
-        int has_w = (cwid && cwid != Py_None);
+        PyObject *cwid = SLOT(c, off_width);
+        int has_w = (cwid != Py_None);
         if (has_w) {
             col_widths[i] = rc_resolve_size(cwid, w);
         } else {
             col_widths[i] = c_measure_node(ctx, c);
-            if (col_widths[i] < 0) { Py_XDECREF(cwid); return -1; }
+            if (col_widths[i] < 0) return -1;
         }
-        Py_XDECREF(cwid);
-        int g = rc_int_attr(c, a_grow, 0);
+        int g = slot_int(c, off_grow);
         if (!has_w && g) {
             if (ng >= 256) {
                 PyErr_SetString(PyExc_OverflowError,
@@ -943,8 +1026,6 @@ static int flex_dist(RenderCtx *ctx, PyObject **act, int n,
             grow_idx[ng] = i;
             grow_wt[ng] = g;
             ng++;
-            /* Grow columns start at 0 — their space comes entirely from
-               the flex distribution, matching vstack flex behavior. */
             col_widths[i] = 0;
         }
         used += col_widths[i];
@@ -998,27 +1079,19 @@ static int render_hstack_wrap(RenderCtx *ctx, PyObject *children,
 
 static int render_hstack(RenderCtx *ctx, PyObject *node,
                          int x, int y, int w, int h, Style bg) {
-    PyObject *children = PyObject_GetAttr(node, a_children);
-    if (!children) return -1;
+    PyObject *children = SLOT(node, off_children); /* borrowed */
     Py_ssize_t nc = PyTuple_GET_SIZE(children);
 
-    int spacing = rc_int_attr(node, a_spacing, 0);
+    int spacing = slot_int(node, off_hstack_spacing);
 
     /* Wrap mode. */
-    if (rc_bool_attr(node, a_wrap, 0)) {
-        int r = render_hstack_wrap(ctx, children, nc, spacing,
-                                   x, y, w, h, bg);
-        Py_DECREF(children);
-        return r;
-    }
+    if (slot_bool(node, off_hstack_wrap))
+        return render_hstack_wrap(ctx, children, nc, spacing,
+                                  x, y, w, h, bg);
 
-    /* Read justify / align. */
-    PyObject *jc = PyObject_GetAttr(node, a_justify_content);
-    PyObject *ai = PyObject_GetAttr(node, a_align_items);
-    if (!jc || !ai) {
-        Py_XDECREF(jc); Py_XDECREF(ai); Py_DECREF(children);
-        return -1;
-    }
+    /* Read justify / align (borrowed). */
+    PyObject *jc = SLOT(node, off_hstack_jc);
+    PyObject *ai = SLOT(node, off_hstack_ai);
 
     /* Collect active children (measure > 0 or grow or width). */
     PyObject *act_arr[512];
@@ -1026,37 +1099,26 @@ static int render_hstack(RenderCtx *ctx, PyObject *node,
     for (Py_ssize_t i = 0; i < nc; i++) {
         PyObject *c = PyTuple_GET_ITEM(children, i);
         int m = c_measure_node(ctx, c);
-        if (m < 0) {
-            Py_DECREF(jc); Py_DECREF(ai); Py_DECREF(children);
-            return -1;
-        }
-        int g = rc_int_attr(c, a_grow, 0);
-        PyObject *cwid = PyObject_GetAttr(c, a_width);
-        int has_w = (cwid && cwid != Py_None);
-        Py_XDECREF(cwid);
+        if (m < 0) return -1;
+        int g = slot_int(c, off_grow);
+        int has_w = (SLOT(c, off_width) != Py_None);
         if (m > 0 || g || has_w) {
             if (n >= 512) {
                 PyErr_SetString(PyExc_OverflowError,
                                 "HStack: too many active children (max 512)");
-                Py_DECREF(jc); Py_DECREF(ai); Py_DECREF(children);
                 return -1;
             }
             act_arr[n++] = c;
         }
     }
 
-    if (n == 0) {
-        Py_DECREF(jc); Py_DECREF(ai); Py_DECREF(children);
+    if (n == 0)
         return (h >= 0) ? h : 1;
-    }
 
     /* Flex distribution. */
     int col_widths[512];
     int remaining = flex_dist(ctx, act_arr, n, col_widths, w, spacing);
-    if (remaining < 0) {
-        Py_DECREF(jc); Py_DECREF(ai); Py_DECREF(children);
-        return -1;
-    }
+    if (remaining < 0) return -1;
 
     /* Compute x offsets based on justify_content. */
     int offsets[512];
@@ -1100,20 +1162,16 @@ static int render_hstack(RenderCtx *ctx, PyObject *node,
         int col_heights[512];
         int offscreen = ctx->buf->height;
         for (int i = 0; i < n; i++) {
-            int g = rc_int_attr(act_arr[i], a_grow, 0);
+            int g = slot_int(act_arr[i], off_grow);
             int ch = g ? h : -1;
             int cr = c_render_node(ctx, act_arr[i],
                                    x + offsets[i], offscreen,
                                    col_widths[i], ch, bg);
-            if (cr < 0) {
-                Py_DECREF(jc); Py_DECREF(ai); Py_DECREF(children);
-                return -1;
-            }
+            if (cr < 0) return -1;
             col_heights[i] = cr;
             if (cr > max_rows) max_rows = cr;
         }
 
-        /* Compute y offsets based on align_items. */
         for (int i = 0; i < n; i++) {
             int diff = max_rows - col_heights[i];
             if (ai == s_end)
@@ -1127,10 +1185,9 @@ static int render_hstack(RenderCtx *ctx, PyObject *node,
         for (int i = 0; i < n; i++) y_offsets[i] = 0;
     }
 
-    /* Render each child into its column.
-     * Pre-fill grow columns with 1 row of spaces (for single-row padding). */
+    /* Render each child into its column. */
     for (int i = 0; i < n; i++) {
-        int g = rc_int_attr(act_arr[i], a_grow, 0);
+        int g = slot_int(act_arr[i], off_grow);
         if (g)
             rc_fill_region(ctx->buf, x + offsets[i], y + y_offsets[i],
                            col_widths[i], 1, bg);
@@ -1138,24 +1195,16 @@ static int render_hstack(RenderCtx *ctx, PyObject *node,
         int cr = c_render_node(ctx, act_arr[i],
                                x + offsets[i], y + y_offsets[i],
                                col_widths[i], ch, bg);
-        if (cr < 0) {
-            Py_DECREF(jc); Py_DECREF(ai); Py_DECREF(children);
-            return -1;
-        }
+        if (cr < 0) return -1;
         if (ai == s_start && cr > max_rows) max_rows = cr;
     }
 
-    /* Fill unwritten cells in each column area so background is visible
-     * in multi-row hstacks where shorter columns leave gaps. */
     if (max_rows > 1) {
         for (int i = 0; i < n; i++)
             rc_fill_unwritten(ctx->buf, x + offsets[i], y + y_offsets[i],
                               col_widths[i], max_rows, bg);
     }
 
-    Py_DECREF(jc);
-    Py_DECREF(ai);
-    Py_DECREF(children);
     return max_rows;
 }
 
@@ -1181,22 +1230,13 @@ static const Py_UCS4 *lookup_border(PyObject *style) {
 
 static int render_box(RenderCtx *ctx, PyObject *node,
                       int x, int y, int w, int h, Style bg) {
-    PyObject *children = PyObject_GetAttr(node, a_children);
-    if (!children) return -1;
-    if (PyTuple_GET_SIZE(children) == 0) {
-        Py_DECREF(children);
-        return 0;
-    }
+    PyObject *children = SLOT(node, off_children);
+    if (PyTuple_GET_SIZE(children) == 0) return 0;
     PyObject *child = PyTuple_GET_ITEM(children, 0);
 
-    PyObject *style_obj = PyObject_GetAttr(node, a_style);
-    PyObject *title_obj = PyObject_GetAttr(node, a_title);
-    int pad = rc_int_attr(node, a_padding, 0);
-    if (!style_obj || !title_obj) {
-        Py_XDECREF(style_obj); Py_XDECREF(title_obj);
-        Py_DECREF(children);
-        return -1;
-    }
+    PyObject *style_obj = SLOT(node, off_box_style);   /* borrowed */
+    PyObject *title_obj = SLOT(node, off_box_title);    /* borrowed */
+    int pad = slot_int(node, off_box_padding);
 
     const Py_UCS4 *bdr = lookup_border(style_obj);
     Py_UCS4 tl = bdr[0], tr = bdr[1], bl = bdr[2], br = bdr[3];
@@ -1204,7 +1244,7 @@ static int render_box(RenderCtx *ctx, PyObject *node,
 
     /* Compute inner width. */
     int child_w = c_measure_node(ctx, child);
-    if (child_w < 0) goto box_err;
+    if (child_w < 0) return -1;
     int child_grow = rc_int_attr(child, a_grow, 0);
     int content_w = child_w + pad * 2;
     int title_w = 0;
@@ -1250,15 +1290,11 @@ static int render_box(RenderCtx *ctx, PyObject *node,
     }
 
     /* Measure child height, fill interior for opacity, render on top. */
-    int offscreen = ctx->buf->height;
-    int cr = c_render_node(ctx, child, x + 1 + pad, offscreen, cw, child_h, bg);
-    if (cr < 0) goto box_err;
+    int cr = c_render_node(ctx, child, x + 1 + pad,
+                           ctx->buf->height, cw, child_h, bg);
+    if (cr < 0) return -1;
     int content_rows = cr > 0 ? cr : 1;
-
-    /* Fill entire interior (box must be opaque over ZStack layers). */
     rc_fill_region(buf, x + 1, y + 1, inner, content_rows, bg);
-
-    /* Render child on top of fill — single content render. */
     c_render_node(ctx, child, x + 1 + pad, y + 1, cw, child_h, bg);
 
     for (int r = 0; r < content_rows; r++) {
@@ -1277,16 +1313,7 @@ static int render_box(RenderCtx *ctx, PyObject *node,
         rc_set_cell(buf, x + 1 + inner, bot, br, bg);
     }
 
-    Py_DECREF(style_obj);
-    Py_DECREF(title_obj);
-    Py_DECREF(children);
     return 2 + content_rows;
-
-box_err:
-    Py_XDECREF(style_obj);
-    Py_XDECREF(title_obj);
-    Py_DECREF(children);
-    return -1;
 }
 
 /* ── Scroll ───────────────────────────────────────────────────────── */
@@ -1295,28 +1322,18 @@ static int render_scroll(RenderCtx *ctx, PyObject *node,
                          int x, int y, int w, int h, Style bg) {
     if (h <= 0) return 0;
 
-    PyObject *state = PyObject_GetAttr(node, a_state);
-    PyObject *children = PyObject_GetAttr(node, a_children);
-    if (!state || !children) {
-        Py_XDECREF(state); Py_XDECREF(children);
-        return -1;
-    }
-
+    PyObject *state = SLOT(node, off_scroll_state);     /* borrowed */
+    PyObject *children = SLOT(node, off_children);       /* borrowed */
     Py_ssize_t total = PyTuple_GET_SIZE(children);
 
-    /* Update state. */
+    /* Update state (ScrollState is a regular Python object — use SetAttr). */
     rc_set_int(state, a_height, h);
     rc_set_int(state, a_total, (int)total);
 
     int follow = rc_bool_attr(state, a_follow, 0);
     int max_off = rc_int_attr(state, a_max_offset, 0);
 
-    int offset;
-    if (follow) {
-        offset = max_off;
-    } else {
-        offset = rc_int_attr(state, a_offset, 0);
-    }
+    int offset = follow ? max_off : rc_int_attr(state, a_offset, 0);
     if (offset < 0) offset = 0;
     if (offset > max_off) offset = max_off;
     rc_set_int(state, a_offset, offset);
@@ -1324,20 +1341,17 @@ static int render_scroll(RenderCtx *ctx, PyObject *node,
     if ((int)total > h && offset >= max_off)
         rc_set_bool(state, a_follow, 1);
 
-    /* Render visible children (like _fill_rows). */
     int rows = 0;
     for (Py_ssize_t i = (Py_ssize_t)offset; i < total && rows < h; i++) {
         int remaining = h - rows;
         int cr = c_render_node(ctx, PyTuple_GET_ITEM(children, i),
                                x, y + rows, w, remaining, bg);
-        if (cr < 0) { Py_DECREF(state); Py_DECREF(children); return -1; }
+        if (cr < 0) return -1;
         if (cr > remaining) cr = remaining;
         rows += cr;
     }
 
-    Py_DECREF(state);
-    Py_DECREF(children);
-    return h;  /* Scroll always fills its height. */
+    return h;
 }
 
 /* ── Table ────────────────────────────────────────────────────────── */
@@ -1455,97 +1469,68 @@ static int render_table(RenderCtx *ctx, PyObject *node,
 
 static int render_zstack(RenderCtx *ctx, PyObject *node,
                          int x, int y, int w, int h, Style bg) {
-    PyObject *children = PyObject_GetAttr(node, a_children);
-    if (!children) return -1;
+    PyObject *children = SLOT(node, off_children); /* borrowed */
     Py_ssize_t n = PyTuple_GET_SIZE(children);
-    if (n == 0) {
-        Py_DECREF(children);
-        return (h >= 0) ? h : 1;
-    }
+    if (n == 0) return (h >= 0) ? h : 1;
 
-    PyObject *jc = PyObject_GetAttr(node, a_justify_content);
-    PyObject *ai = PyObject_GetAttr(node, a_align_items);
-    if (!jc || !ai) {
-        Py_XDECREF(jc); Py_XDECREF(ai); Py_DECREF(children);
-        return -1;
-    }
+    PyObject *jc = SLOT(node, off_zstack_jc); /* borrowed */
+    PyObject *ai = SLOT(node, off_zstack_ai); /* borrowed */
 
     int is_start = (jc == s_start && ai == s_start);
 
-    /* First layer establishes canvas height when h is unconstrained. */
     int canvas_h = h;
-    Py_ssize_t first_done = 0;  /* 1 if first child already rendered in-place */
+    Py_ssize_t first_done = 0;
     if (canvas_h < 0) {
         PyObject *first = PyTuple_GET_ITEM(children, 0);
         if (is_start) {
-            /* Render first child in-place — no offscreen duplicate. */
             canvas_h = c_render_node(ctx, first, x, y, w, -1, bg);
-            if (canvas_h < 0) goto zstack_err;
+            if (canvas_h < 0) return -1;
             first_done = 1;
         } else {
-            /* Alignment needs canvas_h before positioning; measure offscreen. */
-            int offscreen = ctx->buf->height;
-            canvas_h = c_render_node(ctx, first, x, offscreen, w, -1, bg);
-            if (canvas_h < 0) goto zstack_err;
+            canvas_h = c_render_node(ctx, first, x, ctx->buf->height,
+                                     w, -1, bg);
+            if (canvas_h < 0) return -1;
         }
     }
 
-    /* Render layers, then fill unwritten cells with bg. */
     for (Py_ssize_t i = first_done; i < n; i++) {
         PyObject *child = PyTuple_GET_ITEM(children, i);
 
         if (is_start) {
-            int cr = c_render_node(ctx, child, x, y, w, canvas_h, bg);
-            if (cr < 0) goto zstack_err;
+            if (c_render_node(ctx, child, x, y, w, canvas_h, bg) < 0)
+                return -1;
             continue;
         }
 
-        /* Alignment: compute layer dimensions and offset. */
-        int g = rc_int_attr(child, a_grow, 0);
-        int layer_w, layer_h;
-
+        int g = slot_int(child, off_grow);
         if (g && canvas_h >= 0) {
-            /* Grow child fills the canvas — offset is (0,0). */
             c_render_node(ctx, child, x, y, w, canvas_h, bg);
             continue;
         }
 
-        /* Measure width and height. */
-        PyObject *cwid = PyObject_GetAttr(child, a_width);
-        int has_w = (cwid && cwid != Py_None);
-        Py_XDECREF(cwid);
+        int has_w = (SLOT(child, off_width) != Py_None);
+        int layer_h = c_render_node(ctx, child, x, ctx->buf->height,
+                                    w, canvas_h, bg);
+        if (layer_h < 0) return -1;
 
-        /* Off-screen dry-run to measure height (and rendered width). */
-        int offscreen = ctx->buf->height;
-        layer_h = c_render_node(ctx, child, x, offscreen, w,
-                                canvas_h, bg);
-        if (layer_h < 0) goto zstack_err;
-
+        int layer_w;
         if (has_w) {
             layer_w = c_measure_node(ctx, child);
-            if (layer_w < 0) goto zstack_err;
+            if (layer_w < 0) return -1;
         } else {
-            /* Containers that fill their width (ZStack) use the full
-             * available width.  Others use their intrinsic measure. */
-            PyTypeObject *ctp = Py_TYPE(child);
-            if (ctp == ZStackType_)
+            if (Py_TYPE(child) == ZStackType_)
                 layer_w = w;
             else {
                 layer_w = c_measure_node(ctx, child);
-                if (layer_w < 0) goto zstack_err;
+                if (layer_w < 0) return -1;
             }
         }
 
-        /* Compute alignment offsets. */
         int row_off = 0, col_off = 0;
-        if (ai == s_end)
-            row_off = canvas_h - layer_h;
-        else if (ai == s_center)
-            row_off = (canvas_h - layer_h) / 2;
-        if (jc == s_end)
-            col_off = w - layer_w;
-        else if (jc == s_center)
-            col_off = (w - layer_w) / 2;
+        if (ai == s_end)       row_off = canvas_h - layer_h;
+        else if (ai == s_center) row_off = (canvas_h - layer_h) / 2;
+        if (jc == s_end)       col_off = w - layer_w;
+        else if (jc == s_center) col_off = (w - layer_w) / 2;
         if (row_off < 0) row_off = 0;
         if (col_off < 0) col_off = 0;
 
@@ -1553,29 +1538,17 @@ static int render_zstack(RenderCtx *ctx, PyObject *node,
                       w, canvas_h, bg);
     }
 
-    /* Fill unwritten cells with background (replaces pre-fill). */
     rc_fill_unwritten(ctx->buf, x, y, w, canvas_h, bg);
-
-    Py_DECREF(jc);
-    Py_DECREF(ai);
-    Py_DECREF(children);
     return canvas_h;
-
-zstack_err:
-    Py_DECREF(jc);
-    Py_DECREF(ai);
-    Py_DECREF(children);
-    return -1;
 }
 
 /* ── Input ────────────────────────────────────────────────────────── */
 
 static int render_input(RenderCtx *ctx, PyObject *node,
                         int x, int y, int w, int h, Style bg) {
-    PyObject *buf_obj = PyObject_GetAttr(node, a_buffer);
-    if (!buf_obj) return -1;
+    PyObject *buf_obj = SLOT(node, off_input_buffer); /* borrowed */
 
-    int active = rc_bool_attr(node, a_active, 0);
+    int active = slot_bool(node, off_input_active);
 
     /* Check if value is empty. */
     PyObject *val = PyObject_GetAttr(buf_obj, a_value);
@@ -1584,9 +1557,8 @@ static int render_input(RenderCtx *ctx, PyObject *node,
     Py_XDECREF(val);
 
     if (empty && !active) {
-        PyObject *ph = PyObject_GetAttr(node, a_placeholder);
+        PyObject *ph = SLOT(node, off_input_placeholder); /* borrowed */
         if (ph && PyUnicode_Check(ph) && PyUnicode_GET_LENGTH(ph) > 0) {
-            /* Render placeholder with dim style. */
             Style dim = bg;
             dim.flags |= FLAG_DIM;
             Py_ssize_t len = PyUnicode_GET_LENGTH(ph);
@@ -1605,18 +1577,13 @@ static int render_input(RenderCtx *ctx, PyObject *node,
                     col++;
                 }
             }
-            Py_DECREF(ph);
-        } else {
-            Py_XDECREF(ph);
         }
-        Py_DECREF(buf_obj);
         return 1;
     }
 
-    /* Get display text via Python helper. */
     PyObject *txt_obj = PyObject_CallFunctionObjArgs(
         py_display_text, buf_obj, NULL);
-    if (!txt_obj) { Py_DECREF(buf_obj); return -1; }
+    if (!txt_obj) return -1;
 
     Py_ssize_t txt_len = PyUnicode_GET_LENGTH(txt_obj);
     int kind = PyUnicode_KIND(txt_obj);
@@ -1626,20 +1593,15 @@ static int render_input(RenderCtx *ctx, PyObject *node,
     if (active) {
         PyObject *cur_obj = PyObject_CallFunctionObjArgs(
             py_display_cursor, buf_obj, NULL);
-        if (!cur_obj) {
-            Py_DECREF(txt_obj); Py_DECREF(buf_obj);
-            return -1;
-        }
+        if (!cur_obj) { Py_DECREF(txt_obj); return -1; }
         cursor = (int)PyLong_AsLong(cur_obj);
         Py_DECREF(cur_obj);
     }
 
-    /* Render text with character-based wrapping at width boundaries. */
     Py_ssize_t raw_len = active && cursor >= txt_len
                          ? txt_len + 1 : txt_len;
     if (raw_len == 0) {
         Py_DECREF(txt_obj);
-        Py_DECREF(buf_obj);
         return 1;
     }
 
@@ -1663,7 +1625,6 @@ static int render_input(RenderCtx *ctx, PyObject *node,
     }
 
     Py_DECREF(txt_obj);
-    Py_DECREF(buf_obj);
     return rows > 0 ? rows : 1;
 }
 
@@ -1671,20 +1632,17 @@ static int render_input(RenderCtx *ctx, PyObject *node,
 
 static int render_scrollbar(RenderCtx *ctx, PyObject *node,
                             int x, int y, int w, int h, Style bg) {
-    PyObject *state = PyObject_GetAttr(node, a_state);
-    if (!state) return -1;
+    PyObject *state = SLOT(node, off_scrollbar_state); /* borrowed */
 
     int sh = rc_int_attr(state, a_height, 0);
     int total = rc_int_attr(state, a_total, 0);
     int offset = rc_int_attr(state, a_offset, 0);
-    Py_DECREF(state);
 
     if (sh <= 0 || total <= sh)
         return sh > 0 ? sh : 0;
 
-    /* Call node.render_fn(sh, total, offset) → list[str]. */
-    PyObject *fn = PyObject_GetAttr(node, a_render_fn);
-    if (!fn) return -1;
+    PyObject *fn = SLOT(node, off_scrollbar_render_fn); /* borrowed */
+    Py_INCREF(fn); /* protect during call */
     PyObject *result = PyObject_CallFunction(fn, "iii", sh, total, offset);
     Py_DECREF(fn);
     if (!result) return -1;
@@ -1747,19 +1705,11 @@ static int render_listview(RenderCtx *ctx, PyObject *node,
     if (offset > max_off) offset = max_off;
     rc_set_int(scroll, a_offset, offset);
 
-    /* Get items, render_fn, and item cache. */
     PyObject *items = PyObject_GetAttr(state, a_items);
-    PyObject *fn = PyObject_GetAttr(node, a_render_fn);
-    if (!items || !fn) {
-        Py_XDECREF(items); Py_XDECREF(fn);
-        Py_DECREF(scroll); Py_DECREF(state);
-        return -1;
-    }
-    PyObject *cache = PyObject_GetAttr(node, a_cache);
-    if (!cache || !PyDict_Check(cache)) {
-        Py_XDECREF(cache);
-        cache = NULL;
-    }
+    if (!items) { Py_DECREF(scroll); Py_DECREF(state); return -1; }
+    PyObject *fn = SLOT(node, off_list_render_fn);       /* borrowed */
+    PyObject *cache = SLOT(node, off_list_cache);         /* borrowed */
+    if (!cache || !PyDict_Check(cache)) cache = NULL;
 
     Py_ssize_t nitems = PyList_GET_SIZE(items);
     int rows = 0;
@@ -1810,8 +1760,7 @@ static int render_listview(RenderCtx *ctx, PyObject *node,
         Py_XDECREF(item_key);
 
         if (!child) {
-            Py_XDECREF(cache);
-            Py_DECREF(items); Py_DECREF(fn);
+            Py_DECREF(items);
             Py_DECREF(scroll); Py_DECREF(state);
             return -1;
         }
@@ -1820,8 +1769,7 @@ static int render_listview(RenderCtx *ctx, PyObject *node,
                                remaining, bg);
         Py_DECREF(child);
         if (cr < 0) {
-            Py_XDECREF(cache);
-            Py_DECREF(items); Py_DECREF(fn);
+            Py_DECREF(items);
             Py_DECREF(scroll); Py_DECREF(state);
             return -1;
         }
@@ -1829,9 +1777,7 @@ static int render_listview(RenderCtx *ctx, PyObject *node,
         rows += cr;
     }
 
-    Py_XDECREF(cache);
     Py_DECREF(items);
-    Py_DECREF(fn);
     Py_DECREF(scroll);
     Py_DECREF(state);
     return h;
@@ -1898,63 +1844,51 @@ static int dispatch_render(RenderCtx *ctx, PyTypeObject *tp,
 static int c_render_framed(RenderCtx *ctx, PyTypeObject *tp,
                            PyObject *node,
                            int x, int y, int w, int h, Style bg) {
-    /* Read framing attributes. */
-    PyObject *nw  = PyObject_GetAttr(node, a_width);
-    PyObject *nh  = PyObject_GetAttr(node, a_height);
-    PyObject *nbg = PyObject_GetAttr(node, a_bg);
-    if (!nw || !nh || !nbg) {
-        Py_XDECREF(nw); Py_XDECREF(nh); Py_XDECREF(nbg);
-        return -1;
-    }
+    /* Direct slot reads — borrowed refs, no DECREF needed. */
+    PyObject *nw  = SLOT(node, off_width);
+    PyObject *nh  = SLOT(node, off_height);
+    PyObject *nbg = SLOT(node, off_bg);
 
     int has_frame = (nw != Py_None || nh != Py_None || nbg != Py_None);
+    if (!has_frame)
+        return dispatch_render(ctx, tp, node, x, y, w, h, bg);
+
     int has_explicit_h = (nh != Py_None);
     int has_explicit_w = (nw != Py_None);
-    PyObject *ovf = PyObject_GetAttr(node, a_overflow);
-    int clips = (ovf && ovf != s_visible);
-    Py_XDECREF(ovf);
+    PyObject *ovf = SLOT(node, off_overflow);
+    int clips = (ovf != s_visible);
 
-    if (has_frame) {
-        /* Resolve explicit sizes. */
-        int rw = rc_resolve_size(nw, w);
-        int rh = rc_resolve_size(nh, h >= 0 ? h : 0);
-        if (rw >= 0) w = rw < w ? rw : w;
-        if (rh >= 0) {
-            int ch = (h >= 0) ? (rh < h ? rh : h) : rh;
-            h = ch;
-        }
+    /* Resolve explicit sizes. */
+    int rw = rc_resolve_size(nw, w);
+    int rh = rc_resolve_size(nh, h >= 0 ? h : 0);
+    if (rw >= 0) w = rw < w ? rw : w;
+    if (rh >= 0) {
+        int ch = (h >= 0) ? (rh < h ? rh : h) : rh;
+        h = ch;
+    }
 
-        /* Pre-fill background. */
-        if (nbg != Py_None) {
-            int bgc = (int)PyLong_AsLong(nbg);
-            bg = (Style){COLOR_EMPTY,
-                         {COLOR_INDEXED, (uint8_t)bgc, 0, 0},
-                         0, {0, 0}};
-            if (h >= 0)
-                rc_fill_region(ctx->buf, x, y, w, h, bg);
-        }
-
-        /* Fill explicit-width region with spaces so clip area is visible.
-         * When h<0, this is deferred until after content render. */
-        if (has_explicit_w && clips && h >= 0)
+    /* Pre-fill background. */
+    if (nbg != Py_None) {
+        int bgc = (int)PyLong_AsLong(nbg);
+        bg = (Style){COLOR_EMPTY,
+                     {COLOR_INDEXED, (uint8_t)bgc, 0, 0},
+                     0, {0, 0}};
+        if (h >= 0)
             rc_fill_region(ctx->buf, x, y, w, h, bg);
     }
 
-    Py_DECREF(nw);
-    Py_DECREF(nh);
-    Py_DECREF(nbg);
+    if (has_explicit_w && clips && h >= 0)
+        rc_fill_region(ctx->buf, x, y, w, h, bg);
 
     /* Dispatch to type-specific renderer. */
     int rows = dispatch_render(ctx, tp, node, x, y, w, h, bg);
 
-    /* Deferred fill: when bg or explicit width+clip was set but h was
-     * unconstrained, fill after content render so we know the height. */
-    int need_deferred = (has_frame && rows > 0 && h < 0 &&
+    /* Deferred fill: bg or explicit width+clip was set but h was
+     * unconstrained — fill after content render so we know the height. */
+    if (rows > 0 && h < 0 &&
         ((!style_is_empty(bg) && bg.bg.kind != COLOR_NONE) ||
-         (has_explicit_w && clips)));
-    if (need_deferred) {
+         (has_explicit_w && clips)))
         rc_fill_unwritten(ctx->buf, x, y, w, rows, bg);
-    }
 
     if (has_explicit_h && rows >= 0 && h >= 0 && rows < h)
         rows = h;
