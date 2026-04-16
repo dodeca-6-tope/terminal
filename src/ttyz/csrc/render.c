@@ -68,7 +68,6 @@ static PyObject *a_cells;
 static PyObject *a_buffer;
 static PyObject *a_active;
 static PyObject *a_placeholder;
-static PyObject *a_value;
 static PyObject *a_total;
 static PyObject *a_wrap;
 static PyObject *a_render_fn;
@@ -242,7 +241,6 @@ static int init_render_types(void) {
     INTERN(a_buffer,          "buffer");
     INTERN(a_active,          "active");
     INTERN(a_placeholder,     "placeholder");
-    INTERN(a_value,           "value");
     INTERN(a_total,           "total");
     INTERN(a_wrap,            "wrap");
     INTERN(a_render_fn,       "render_fn");
@@ -437,6 +435,21 @@ static void rc_set_bool(PyObject *obj, PyObject *name, int val) {
     if (PyObject_SetAttr(obj, name, v) < 0) PyErr_Clear();
 }
 
+/* Distribute remaining space among flex items proportionally. */
+static void distribute_flex(int remaining, int *indices, int *weights,
+                            int count, int *out) {
+    long tw = 0;
+    for (int j = 0; j < count; j++) tw += weights[j];
+    if (tw <= 0) return;
+    long cum = 0, cs = 0;
+    for (int j = 0; j < count; j++) {
+        cum += weights[j];
+        long tgt = (long)remaining * cum / tw;
+        out[indices[j]] = (int)(tgt - cs);
+        cs = tgt;
+    }
+}
+
 /* ── parse_line_into — write an ANSI string into cells ───────────── */
 /*
  * Parses a Python string (which may contain ANSI escapes) and writes
@@ -542,6 +555,44 @@ static void parse_line_into(BufferObject *buf, int x, int y, int max_w,
     }
 }
 
+/* Write a padded line: left-pad, content, right-pad. */
+static void render_padded_line(BufferObject *buf, int x, int y, int w,
+                               int pl, int pr, int max_w,
+                               PyObject *line, Style bg) {
+    int inner_x = x + pl;
+    for (int c = x; c < inner_x && c < x + w; c++)
+        rc_set_cell(buf, c, y, ' ', bg);
+    parse_line_into(buf, inner_x, y, max_w, line, bg);
+    int rp = inner_x + max_w;
+    for (int c = rp; c < rp + pr && c < x + w; c++)
+        rc_set_cell(buf, c, y, ' ', bg);
+}
+
+/* Measure column widths (and optionally grow weights) for a Table. */
+static int table_measure_cols(RenderCtx *ctx, PyObject *rows, Py_ssize_t nr,
+                              int *col_w, int *grow_w) {
+    int num_cols = 0;
+    for (Py_ssize_t r = 0; r < nr; r++) {
+        PyObject *cells = PyObject_GetAttr(
+            PyList_GET_ITEM(rows, r), a_cells);
+        if (!cells) continue;
+        int nc = (int)PyList_GET_SIZE(cells);
+        if (nc > num_cols) num_cols = nc;
+        for (Py_ssize_t ci = 0; ci < nc && ci < 256; ci++) {
+            PyObject *cell = PyList_GET_ITEM(cells, ci);
+            int m = c_measure_node(ctx, cell);
+            if (m < 0) { Py_DECREF(cells); return -1; }
+            if (m > col_w[ci]) col_w[ci] = m;
+            if (grow_w) {
+                int g = slot_int(cell, off_grow);
+                if (g > grow_w[ci]) grow_w[ci] = g;
+            }
+        }
+        Py_DECREF(cells);
+    }
+    return num_cols;
+}
+
 /* ── Measure ──────────────────────────────────────────────────────── */
 
 static int c_measure_node(RenderCtx *ctx, PyObject *node) {
@@ -610,32 +661,10 @@ static int c_measure_node(RenderCtx *ctx, PyObject *node) {
         if (!rows) return -1;
         if (PyList_Check(rows) && PyList_GET_SIZE(rows) > 0) {
             int spacing = rc_int_attr(node, a_spacing, 0);
-            int num_cols = 0;
             Py_ssize_t nr = PyList_GET_SIZE(rows);
-            for (Py_ssize_t r = 0; r < nr; r++) {
-                PyObject *cells = PyObject_GetAttr(
-                    PyList_GET_ITEM(rows, r), a_cells);
-                if (cells) {
-                    int nc = (int)PyList_GET_SIZE(cells);
-                    if (nc > num_cols) num_cols = nc;
-                    Py_DECREF(cells);
-                }
-            }
-            int cw[256];
-            for (int i = 0; i < 256; i++) cw[i] = 0;
-            for (Py_ssize_t r = 0; r < nr; r++) {
-                PyObject *cells = PyObject_GetAttr(
-                    PyList_GET_ITEM(rows, r), a_cells);
-                if (!cells) continue;
-                Py_ssize_t nc = PyList_GET_SIZE(cells);
-                for (Py_ssize_t ci = 0; ci < nc && ci < 256; ci++) {
-                    int m = c_measure_node(ctx,
-                                           PyList_GET_ITEM(cells, ci));
-                    if (m < 0) { Py_DECREF(cells); Py_DECREF(rows); return -1; }
-                    if (m > cw[ci]) cw[ci] = m;
-                }
-                Py_DECREF(cells);
-            }
+            int cw[256] = {0};
+            int num_cols = table_measure_cols(ctx, rows, nr, cw, NULL);
+            if (num_cols < 0) { Py_DECREF(rows); return -1; }
             for (int ci = 0; ci < num_cols && ci < 256; ci++)
                 result += cw[ci];
             if (num_cols > 1)
@@ -766,7 +795,6 @@ static int render_text(RenderCtx *ctx, PyObject *node,
 
     int pl = slot_int(node, off_text_pl);
     int pr = slot_int(node, off_text_pr);
-    int inner_x = x + pl;
     int inner_w = w - pl - pr;
     if (inner_w < 0) inner_w = 0;
 
@@ -785,7 +813,6 @@ static int render_text(RenderCtx *ctx, PyObject *node,
         PyObject *line = PyList_GET_ITEM(lines, i);
 
         if (do_wrap && inner_w > 0) {
-            /* Wrap into multiple rows. */
             PyObject *wrapped = PyList_New(0);
             if (!wrapped) goto error;
             if (wrap_line_into(line, inner_w, wrapped) < 0) {
@@ -793,54 +820,33 @@ static int render_text(RenderCtx *ctx, PyObject *node,
             }
             Py_ssize_t nw = PyList_GET_SIZE(wrapped);
             for (Py_ssize_t j = 0; j < nw && (h < 0 || rows < h); j++) {
-                int row_y = y + rows;
                 PyObject *wline = PyList_GET_ITEM(wrapped, j);
-                if (has_pad) {
-                    for (int c = x; c < inner_x && c < x + w; c++)
-                        rc_set_cell(ctx->buf, c, row_y, ' ', bg);
-                    parse_line_into(ctx->buf, inner_x, row_y, inner_w, wline, bg);
-                    int rp = inner_x + inner_w;
-                    for (int c = rp; c < rp + pr && c < x + w; c++)
-                        rc_set_cell(ctx->buf, c, row_y, ' ', bg);
-                } else {
-                    parse_line_into(ctx->buf, x, row_y, w, wline, bg);
-                }
+                if (has_pad)
+                    render_padded_line(ctx->buf, x, y + rows, w,
+                                      pl, pr, inner_w, wline, bg);
+                else
+                    parse_line_into(ctx->buf, x, y + rows, w, wline, bg);
                 rows++;
             }
             Py_DECREF(wrapped);
         }
         else if (tmode && inner_w > 0) {
-            /* Truncate, then render single row. */
             PyObject *trunc = truncate_line(line, inner_w, tmode[0]);
             if (!trunc) goto error;
-            int row_y = y + rows;
-            if (has_pad) {
-                for (int c = x; c < inner_x && c < x + w; c++)
-                    rc_set_cell(ctx->buf, c, row_y, ' ', bg);
-                parse_line_into(ctx->buf, inner_x, row_y, inner_w, trunc, bg);
-                int rp = inner_x + inner_w;
-                for (int c = rp; c < rp + pr && c < x + w; c++)
-                    rc_set_cell(ctx->buf, c, row_y, ' ', bg);
-            } else {
-                parse_line_into(ctx->buf, x, row_y, w, trunc, bg);
-            }
+            if (has_pad)
+                render_padded_line(ctx->buf, x, y + rows, w,
+                                  pl, pr, inner_w, trunc, bg);
+            else
+                parse_line_into(ctx->buf, x, y + rows, w, trunc, bg);
             Py_DECREF(trunc);
             rows++;
         }
         else if (has_pad) {
-            /* Padding only — no wrap/truncation. */
-            int row_y = y + rows;
-            int content_w = str_display_width(line);
-            for (int c = x; c < inner_x && c < x + w; c++)
-                rc_set_cell(ctx->buf, c, row_y, ' ', bg);
-            parse_line_into(ctx->buf, inner_x, row_y, content_w, line, bg);
-            int rp = inner_x + content_w;
-            for (int c = rp; c < rp + pr && c < x + w; c++)
-                rc_set_cell(ctx->buf, c, row_y, ' ', bg);
+            render_padded_line(ctx->buf, x, y + rows, w,
+                              pl, pr, str_display_width(line), line, bg);
             rows++;
         }
         else {
-            /* Plain — most common path. */
             parse_line_into(ctx->buf, x, y + rows, w, line, bg);
             rows++;
         }
@@ -918,17 +924,8 @@ static int render_vstack(RenderCtx *ctx, PyObject *node,
 
     int remaining = h - used;
     if (remaining < 0) remaining = 0;
-    if (ng > 0) {
-        long tw = 0;
-        for (int j = 0; j < ng; j++) tw += grow_wt[j];
-        long cum = 0, cs = 0;
-        for (int j = 0; j < ng; j++) {
-            cum += grow_wt[j];
-            long tgt = (long)remaining * cum / tw;
-            child_h[grow_idx[j]] = (int)(tgt - cs);
-            cs = tgt;
-        }
-    }
+    if (ng > 0)
+        distribute_flex(remaining, grow_idx, grow_wt, ng, child_h);
 
     /* Pass 2: render all children at computed y positions. */
     int row = 0;
@@ -1034,15 +1031,7 @@ static int flex_dist(RenderCtx *ctx, PyObject **act, int n,
     int remaining = w - used;
     if (remaining < 0) remaining = 0;
     if (ng > 0 && remaining > 0) {
-        long total_wt = 0;
-        for (int j = 0; j < ng; j++) total_wt += grow_wt[j];
-        long cum_w = 0, cum_s = 0;
-        for (int j = 0; j < ng; j++) {
-            cum_w += grow_wt[j];
-            long target = (long)remaining * cum_w / total_wt;
-            col_widths[grow_idx[j]] += (int)(target - cum_s);
-            cum_s = target;
-        }
+        distribute_flex(remaining, grow_idx, grow_wt, ng, col_widths);
         remaining = 0;
     }
     return remaining;
@@ -1245,7 +1234,7 @@ static int render_box(RenderCtx *ctx, PyObject *node,
     /* Compute inner width. */
     int child_w = c_measure_node(ctx, child);
     if (child_w < 0) return -1;
-    int child_grow = rc_int_attr(child, a_grow, 0);
+    int child_grow = slot_int(child, off_grow);
     int content_w = child_w + pad * 2;
     int title_w = 0;
     Py_ssize_t title_len = PyUnicode_GET_LENGTH(title_obj);
@@ -1368,21 +1357,11 @@ static int render_table(RenderCtx *ctx, PyObject *node,
     int spacing = rc_int_attr(node, a_spacing, 0);
     Py_ssize_t nr = PyList_GET_SIZE(rows);
 
-    /* Measure columns. */
-    int num_cols = 0;
-    for (Py_ssize_t r = 0; r < nr; r++) {
-        PyObject *cells = PyObject_GetAttr(
-            PyList_GET_ITEM(rows, r), a_cells);
-        if (cells) {
-            int nc = (int)PyList_GET_SIZE(cells);
-            if (nc > num_cols) num_cols = nc;
-            Py_DECREF(cells);
-        }
-    }
-    if (num_cols == 0) {
-        Py_DECREF(rows);
-        return 0;
-    }
+    int col_w[256] = {0};
+    int grow_w[256] = {0};
+    int num_cols = table_measure_cols(ctx, rows, nr, col_w, grow_w);
+    if (num_cols < 0) { Py_DECREF(rows); return -1; }
+    if (num_cols == 0) { Py_DECREF(rows); return 0; }
     if (num_cols > 256) {
         PyErr_SetString(PyExc_OverflowError,
                         "Table: too many columns (max 256)");
@@ -1390,48 +1369,25 @@ static int render_table(RenderCtx *ctx, PyObject *node,
         return -1;
     }
 
-    int col_w[256] = {0};
-    int grow_w[256] = {0};
-    int has_grow = 0;
-    for (Py_ssize_t r = 0; r < nr; r++) {
-        PyObject *cells = PyObject_GetAttr(
-            PyList_GET_ITEM(rows, r), a_cells);
-        if (!cells) continue;
-        Py_ssize_t nc = PyList_GET_SIZE(cells);
-        for (Py_ssize_t ci = 0; ci < nc && ci < 256; ci++) {
-            PyObject *cell = PyList_GET_ITEM(cells, ci);
-            int m = c_measure_node(ctx, cell);
-            if (m < 0) { Py_DECREF(cells); Py_DECREF(rows); return -1; }
-            if (m > col_w[ci]) col_w[ci] = m;
-            int g = rc_int_attr(cell, a_grow, 0);
-            if (g) { if (g > grow_w[ci]) grow_w[ci] = g; has_grow = 1; }
-        }
-        Py_DECREF(cells);
-    }
-
     /* Resolve grow columns. */
     int resolved[256];
-    for (int ci = 0; ci < num_cols; ci++) resolved[ci] = col_w[ci];
+    int gidx[256], gwt[256];
+    int ng = 0, has_grow = 0;
+    for (int ci = 0; ci < num_cols; ci++) {
+        resolved[ci] = col_w[ci];
+        if (grow_w[ci]) {
+            gidx[ng] = ci; gwt[ng] = grow_w[ci]; ng++;
+            has_grow = 1;
+        }
+    }
     if (has_grow) {
         int gap_total = spacing * (num_cols > 1 ? num_cols - 1 : 0);
         int fixed = gap_total;
-        long total_gw = 0;
-        for (int ci = 0; ci < num_cols; ci++) {
-            if (grow_w[ci]) { total_gw += grow_w[ci]; }
-            else { fixed += resolved[ci]; }
-        }
+        for (int ci = 0; ci < num_cols; ci++)
+            if (!grow_w[ci]) fixed += resolved[ci];
         int remaining = w - fixed;
         if (remaining < 0) remaining = 0;
-        if (total_gw > 0) {
-            long cum = 0, cs = 0;
-            for (int ci = 0; ci < num_cols; ci++) {
-                if (!grow_w[ci]) continue;
-                cum += grow_w[ci];
-                long tgt = (long)remaining * cum / total_gw;
-                resolved[ci] = (int)(tgt - cs);
-                cs = tgt;
-            }
-        }
+        distribute_flex(remaining, gidx, gwt, ng, resolved);
     }
 
     /* Compute column x offsets. */
@@ -1508,22 +1464,16 @@ static int render_zstack(RenderCtx *ctx, PyObject *node,
             continue;
         }
 
-        int has_w = (SLOT(child, off_width) != Py_None);
         int layer_h = c_render_node(ctx, child, x, ctx->buf->height,
                                     w, canvas_h, bg);
         if (layer_h < 0) return -1;
 
         int layer_w;
-        if (has_w) {
+        if (SLOT(child, off_width) == Py_None && Py_TYPE(child) == ZStackType_) {
+            layer_w = w;
+        } else {
             layer_w = c_measure_node(ctx, child);
             if (layer_w < 0) return -1;
-        } else {
-            if (Py_TYPE(child) == ZStackType_)
-                layer_w = w;
-            else {
-                layer_w = c_measure_node(ctx, child);
-                if (layer_w < 0) return -1;
-            }
         }
 
         int row_off = 0, col_off = 0;
@@ -1628,6 +1578,20 @@ static int render_input(RenderCtx *ctx, PyObject *node,
     return rows > 0 ? rows : 1;
 }
 
+/* Render a Python list of strings into cells. */
+static int render_string_list(RenderCtx *ctx, PyObject *list,
+                              int x, int y, int w, int h, Style bg) {
+    Py_ssize_t nlines = PyList_GET_SIZE(list);
+    int rows = 0;
+    for (Py_ssize_t i = 0; i < nlines; i++) {
+        if (h >= 0 && rows >= h) break;
+        parse_line_into(ctx->buf, x, y + rows, w,
+                        PyList_GET_ITEM(list, i), bg);
+        rows++;
+    }
+    return rows;
+}
+
 /* ── Scrollbar ───────────────────────────────────────────────────── */
 
 static int render_scrollbar(RenderCtx *ctx, PyObject *node,
@@ -1651,14 +1615,7 @@ static int render_scrollbar(RenderCtx *ctx, PyObject *node,
         Py_DECREF(result);
         return sh;
     }
-    Py_ssize_t nlines = PyList_GET_SIZE(result);
-    int rows = 0;
-    for (Py_ssize_t i = 0; i < nlines; i++) {
-        if (h >= 0 && rows >= h) break;
-        parse_line_into(ctx->buf, x, y + rows, w,
-                        PyList_GET_ITEM(result, i), bg);
-        rows++;
-    }
+    int rows = render_string_list(ctx, result, x, y, w, h, bg);
     Py_DECREF(result);
     return rows;
 }
@@ -1802,14 +1759,7 @@ static int render_custom(RenderCtx *ctx, PyObject *node,
         Py_DECREF(result);
         return 0;
     }
-    Py_ssize_t nlines = PyList_GET_SIZE(result);
-    int rows = 0;
-    for (Py_ssize_t i = 0; i < nlines; i++) {
-        if (h >= 0 && rows >= h) break;
-        parse_line_into(ctx->buf, x, y + rows, w,
-                        PyList_GET_ITEM(result, i), bg);
-        rows++;
-    }
+    int rows = render_string_list(ctx, result, x, y, w, h, bg);
     Py_DECREF(result);
     return rows;
 }
