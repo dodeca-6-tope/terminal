@@ -45,8 +45,12 @@ static PyObject *a_width;
 static PyObject *a_height;
 static PyObject *a_bg;
 static PyObject *a_overflow;
-static PyObject *a_text_render;
-static PyObject *a_padding_w;
+static PyObject *a_value;
+static PyObject *a__lines;
+static PyObject *a__visible_w;
+static PyObject *a_pl;
+static PyObject *a_pr;
+static PyObject *a_truncation;
 static PyObject *a_spacing;
 static PyObject *a_has_flex;
 static PyObject *a_min_length;
@@ -84,6 +88,10 @@ static PyObject *s_rounded;
 static PyObject *s_normal;
 static PyObject *s_double;
 static PyObject *s_heavy;
+
+/* Forward declarations. */
+static PyObject *text_get_lines(PyObject *node);
+static int text_visible_w(PyObject *node);
 
 /* Python helpers for Input rendering. */
 static PyObject *py_display_text;
@@ -136,8 +144,12 @@ static int init_render_types(void) {
     INTERN(a_height,          "height");
     INTERN(a_bg,              "bg");
     INTERN(a_overflow,        "overflow");
-    INTERN(a_text_render,     "text_render");
-    INTERN(a_padding_w,       "padding_w");
+    INTERN(a_value,           "value");
+    INTERN(a__lines,          "_lines");
+    INTERN(a__visible_w,      "_visible_w");
+    INTERN(a_pl,              "pl");
+    INTERN(a_pr,              "pr");
+    INTERN(a_truncation,      "truncation");
     INTERN(a_spacing,         "spacing");
     INTERN(a_has_flex,        "has_flex");
     INTERN(a_min_length,      "min_length");
@@ -409,12 +421,7 @@ static int c_measure_node(RenderCtx *ctx, PyObject *node) {
     Py_DECREF(node_w);
 
     if (tp == TextType_) {
-        PyObject *tr = PyObject_GetAttr(node, a_text_render);
-        if (!tr) return -1;
-        CTextRenderObject *ct = (CTextRenderObject *)tr;
-        int pw = rc_int_attr(node, a_padding_w, 0);
-        result = ct->visible_w + pw;
-        Py_DECREF(tr);
+        result = text_visible_w(node) + rc_int_attr(node, a_pl, 0) + rc_int_attr(node, a_pr, 0);
     }
     else if (tp == SpacerType_) {
         result = rc_int_attr(node, a_min_length, 0);
@@ -551,72 +558,174 @@ cache:
     return result;
 }
 
+/* ── Text node helpers ────────────────────────────────────────────── */
+
+/*
+ * Get the cached lines list from a Text node, parsing the value string
+ * on first access.  Returns a borrowed reference.
+ */
+static PyObject *text_get_lines(PyObject *node) {
+    PyObject *cached = PyObject_GetAttr(node, a__lines);
+    if (cached && cached != Py_None) return cached; /* caller must DECREF */
+    Py_XDECREF(cached);
+    PyErr_Clear();
+
+    PyObject *val = PyObject_GetAttr(node, a_value);
+    if (!val) return NULL;
+
+    Py_ssize_t len = PyUnicode_GET_LENGTH(val);
+    PyObject *lines;
+    if (PyUnicode_FindChar(val, '\n', 0, len, 1) < 0) {
+        lines = PyList_New(1);
+        if (!lines) { Py_DECREF(val); return NULL; }
+        PyList_SET_ITEM(lines, 0, val); /* steals ref */
+    } else {
+        lines = PyUnicode_Splitlines(val, 0);
+        Py_DECREF(val);
+        if (!lines) return NULL;
+        if (PyList_GET_SIZE(lines) == 0) {
+            Py_DECREF(lines);
+            lines = PyList_New(1);
+            if (!lines) return NULL;
+            PyList_SET_ITEM(lines, 0, PyUnicode_FromString(""));
+        }
+    }
+
+    /* Compute and cache visible_w. */
+    int visible_w = 0;
+    Py_ssize_t n = PyList_GET_SIZE(lines);
+    for (Py_ssize_t i = 0; i < n; i++) {
+        int lw = str_display_width(PyList_GET_ITEM(lines, i));
+        if (lw > visible_w) visible_w = lw;
+    }
+    PyObject *vw = PyLong_FromLong(visible_w);
+    if (vw) { PyObject_SetAttr(node, a__visible_w, vw); Py_DECREF(vw); }
+
+    /* Cache lines on node. */
+    PyObject_SetAttr(node, a__lines, lines);
+    return lines; /* caller must DECREF */
+}
+
+static int text_visible_w(PyObject *node) {
+    PyObject *vw = PyObject_GetAttr(node, a__visible_w);
+    if (vw && vw != Py_None) {
+        int result = (int)PyLong_AsLong(vw);
+        Py_DECREF(vw);
+        return result;
+    }
+    Py_XDECREF(vw);
+    PyErr_Clear();
+    /* Force parse to populate cache. */
+    PyObject *lines = text_get_lines(node);
+    if (!lines) return 0;
+    Py_DECREF(lines);
+    vw = PyObject_GetAttr(node, a__visible_w);
+    if (!vw) return 0;
+    int result = (int)PyLong_AsLong(vw);
+    Py_DECREF(vw);
+    return result;
+}
+
 /* ── Type-specific renderers ──────────────────────────────────────── */
 
 /* ── Text ─────────────────────────────────────────────────────────── */
 
 static int render_text(RenderCtx *ctx, PyObject *node,
                        int x, int y, int w, int h, Style bg) {
-    PyObject *tr_obj = PyObject_GetAttr(node, a_text_render);
-    if (!tr_obj) return -1;
-    CTextRenderObject *tr = (CTextRenderObject *)tr_obj;
+    PyObject *lines = text_get_lines(node);
+    if (!lines) return -1;
 
-    int pl = tr->pl, pr = tr->pr;
+    int pl = rc_int_attr(node, a_pl, 0);
+    int pr = rc_int_attr(node, a_pr, 0);
     int inner_x = x + pl;
     int inner_w = w - pl - pr;
     if (inner_w < 0) inner_w = 0;
 
-    int rows = 0;
+    int has_pad = (pl > 0 || pr > 0);
 
-    if (tr->mode == TEXT_PLAIN) {
-        /* Lines returned as-is — most common path. */
-        Py_ssize_t n = PyList_GET_SIZE(tr->lines);
-        for (Py_ssize_t i = 0; i < n && (h < 0 || rows < h); i++) {
-            parse_line_into(ctx->buf, x, y + rows, w,
-                            PyList_GET_ITEM(tr->lines, i), bg);
+    /* Check wrap / truncation. */
+    int do_wrap = rc_bool_attr(node, a_wrap, 0);
+    PyObject *trunc_obj = PyObject_GetAttr(node, a_truncation);
+    if (!trunc_obj) { Py_DECREF(lines); return -1; }
+    const char *tmode = (trunc_obj != Py_None)
+        ? PyUnicode_AsUTF8(trunc_obj) : NULL;
+
+    int rows = 0;
+    Py_ssize_t n = PyList_GET_SIZE(lines);
+
+    for (Py_ssize_t i = 0; i < n && (h < 0 || rows < h); i++) {
+        PyObject *line = PyList_GET_ITEM(lines, i);
+
+        if (do_wrap && inner_w > 0) {
+            /* Wrap into multiple rows. */
+            PyObject *wrapped = PyList_New(0);
+            if (!wrapped) goto error;
+            if (wrap_line_into(line, inner_w, wrapped) < 0) {
+                Py_DECREF(wrapped); goto error;
+            }
+            Py_ssize_t nw = PyList_GET_SIZE(wrapped);
+            for (Py_ssize_t j = 0; j < nw && (h < 0 || rows < h); j++) {
+                int row_y = y + rows;
+                PyObject *wline = PyList_GET_ITEM(wrapped, j);
+                if (has_pad) {
+                    for (int c = x; c < inner_x && c < x + w; c++)
+                        rc_set_cell(ctx->buf, c, row_y, ' ', bg);
+                    parse_line_into(ctx->buf, inner_x, row_y, inner_w, wline, bg);
+                    int rp = inner_x + inner_w;
+                    for (int c = rp; c < rp + pr && c < x + w; c++)
+                        rc_set_cell(ctx->buf, c, row_y, ' ', bg);
+                } else {
+                    parse_line_into(ctx->buf, x, row_y, w, wline, bg);
+                }
+                rows++;
+            }
+            Py_DECREF(wrapped);
+        }
+        else if (tmode && inner_w > 0) {
+            /* Truncate, then render single row. */
+            PyObject *trunc = truncate_line(line, inner_w, tmode[0]);
+            if (!trunc) goto error;
+            int row_y = y + rows;
+            if (has_pad) {
+                for (int c = x; c < inner_x && c < x + w; c++)
+                    rc_set_cell(ctx->buf, c, row_y, ' ', bg);
+                parse_line_into(ctx->buf, inner_x, row_y, inner_w, trunc, bg);
+                int rp = inner_x + inner_w;
+                for (int c = rp; c < rp + pr && c < x + w; c++)
+                    rc_set_cell(ctx->buf, c, row_y, ' ', bg);
+            } else {
+                parse_line_into(ctx->buf, x, row_y, w, trunc, bg);
+            }
+            Py_DECREF(trunc);
             rows++;
         }
-    }
-    else if (tr->mode == TEXT_PADDED) {
-        /* Lines with left/right padding (no wrap/truncation).
-         * Use the text's natural width, not the full available width. */
-        int content_w = tr->visible_w;
-        Py_ssize_t n = PyList_GET_SIZE(tr->lines);
-        for (Py_ssize_t i = 0; i < n && (h < 0 || rows < h); i++) {
+        else if (has_pad) {
+            /* Padding only — no wrap/truncation. */
             int row_y = y + rows;
-            /* Fill left padding with spaces. */
+            int content_w = str_display_width(line);
             for (int c = x; c < inner_x && c < x + w; c++)
                 rc_set_cell(ctx->buf, c, row_y, ' ', bg);
-            parse_line_into(ctx->buf, inner_x, row_y, content_w,
-                            PyList_GET_ITEM(tr->lines, i), bg);
-            /* Fill right padding with spaces. */
-            int rp_start = inner_x + content_w;
-            for (int c = rp_start; c < rp_start + pr && c < x + w; c++)
+            parse_line_into(ctx->buf, inner_x, row_y, content_w, line, bg);
+            int rp = inner_x + content_w;
+            for (int c = rp; c < rp + pr && c < x + w; c++)
                 rc_set_cell(ctx->buf, c, row_y, ' ', bg);
             rows++;
         }
-    }
-    else {
-        /* TEXT_FULL — call CTextRender to get processed lines
-         * (handles wrap + truncation), then parse into cells. */
-        PyObject *result;
-        if (h >= 0)
-            result = PyObject_CallFunction(tr_obj, "ii", w, h);
-        else
-            result = PyObject_CallFunction(tr_obj, "iO", w, Py_None);
-        if (!result) { Py_DECREF(tr_obj); return -1; }
-
-        Py_ssize_t n = PyList_GET_SIZE(result);
-        for (Py_ssize_t i = 0; i < n && (h < 0 || rows < h); i++) {
-            parse_line_into(ctx->buf, x, y + rows, w,
-                            PyList_GET_ITEM(result, i), bg);
+        else {
+            /* Plain — most common path. */
+            parse_line_into(ctx->buf, x, y + rows, w, line, bg);
             rows++;
         }
-        Py_DECREF(result);
     }
 
-    Py_DECREF(tr_obj);
+    Py_DECREF(trunc_obj);
+    Py_DECREF(lines);
     return rows;
+
+error:
+    Py_DECREF(trunc_obj);
+    Py_DECREF(lines);
+    return -1;
 }
 
 /* ── VStack ───────────────────────────────────────────────────────── */

@@ -66,7 +66,7 @@ def view(s: S) -> t.Node:
                     t.text(""),
                     *[
                         t.hstack(
-                            t.text(t.bold(t.color(4, k)), padding_right=2),
+                            t.text(t.bold(t.color(4, k)), padding=(0, 2)),
                             t.text(t.dim(d)),
                         )
                         for k, d in [

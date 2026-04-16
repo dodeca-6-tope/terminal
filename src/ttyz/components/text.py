@@ -3,37 +3,40 @@
 from __future__ import annotations
 
 from ttyz.components.base import Node
-from ttyz.ext import TextRender
 
 
 class Text(Node):
-    """Text node — wraps a C ``TextRender`` callable."""
+    """Text node — plain data, rendering handled by C extension."""
 
-    __slots__ = ("text_render", "padding_w")
-    text_render: TextRender
-    padding_w: int
+    __slots__ = ("value", "pl", "pr", "wrap", "truncation", "_lines", "_visible_w")
+    value: str
+    pl: int
+    pr: int
+    wrap: bool
+    truncation: str | None
 
 
 def text(
-    value: object = "",
+    value: str = "",
     *,
     wrap: bool = False,
     truncation: str | None = None,
-    padding: int = 0,
-    padding_left: int | None = None,
-    padding_right: int | None = None,
+    padding: int | tuple[int, int] = 0,
     width: str | None = None,
     height: str | None = None,
     grow: int | None = None,
     bg: int | None = None,
     overflow: str = "visible",
 ) -> Text:
-    pl = padding if padding_left is None else padding_left
-    pr = padding if padding_right is None else padding_right
-
-    tr = TextRender(value, truncation, pl, pr, wrap)
+    if isinstance(padding, tuple):
+        pl, pr = padding
+    else:
+        pl = pr = padding
 
     node = Text((), grow or 0, width, height, bg, overflow)
-    node.text_render = tr
-    node.padding_w = pl + pr
+    node.value = value
+    node.pl = pl
+    node.pr = pr
+    node.wrap = wrap
+    node.truncation = truncation
     return node

@@ -28,8 +28,6 @@ static struct PyModuleDef module_def = {
 PyMODINIT_FUNC PyInit_ext(void) {
     if (PyType_Ready(&BufferType) < 0)
         return NULL;
-    if (PyType_Ready(&CTextRenderType) < 0)
-        return NULL;
 
     PyObject *m = PyModule_Create(&module_def);
     if (!m) return NULL;
@@ -37,13 +35,6 @@ PyMODINIT_FUNC PyInit_ext(void) {
     Py_INCREF(&BufferType);
     if (PyModule_AddObject(m, "Buffer", (PyObject *)&BufferType) < 0) {
         Py_DECREF(&BufferType);
-        Py_DECREF(m);
-        return NULL;
-    }
-
-    Py_INCREF(&CTextRenderType);
-    if (PyModule_AddObject(m, "TextRender", (PyObject *)&CTextRenderType) < 0) {
-        Py_DECREF(&CTextRenderType);
         Py_DECREF(m);
         return NULL;
     }

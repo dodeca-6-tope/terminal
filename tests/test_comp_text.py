@@ -31,15 +31,15 @@ def test_padding(snap: SnapFn):
 
 
 def test_padding_left_right(snap: SnapFn):
-    snap(text("hi", padding_left=1, padding_right=3), 80)
+    snap(text("hi", padding=(1, 3)), 80)
 
 
 def test_padding_left_only(snap: SnapFn):
-    snap(text("hi", padding_left=2), 80)
+    snap(text("hi", padding=(2, 0)), 80)
 
 
 def test_padding_right_only(snap: SnapFn):
-    snap(text("hi", padding_right=2), 80)
+    snap(text("hi", padding=(0, 2)), 80)
 
 
 def test_padding_exceeds_width(snap: SnapFn):
@@ -184,7 +184,7 @@ def test_truncation_content_correct(snap: SnapFn):
 
 def test_wrap_at_zero_inner_width(snap: SnapFn):
     # padding == width → inner width 0, must not hang
-    snap(text("hello", wrap=True, padding_left=5), 5)
+    snap(text("hello", wrap=True, padding=(5, 0)), 5)
 
 
 def test_head_truncation_strips_ansi(snap: SnapFn):
@@ -198,6 +198,6 @@ def test_middle_truncation_strips_ansi(snap: SnapFn):
 
 
 def test_non_string_value(snap: SnapFn):
-    snap(text(42), 80, name="non_string_int")
-    snap(text(None), 80, name="non_string_none")
-    snap(text([1, 2, 3]), 80, name="non_string_list")
+    snap(text(str(42)), 80, name="non_string_int")
+    snap(text(str(None)), 80, name="non_string_none")
+    snap(text(str([1, 2, 3])), 80, name="non_string_list")
