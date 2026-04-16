@@ -48,17 +48,18 @@ def test_multiple_fill_columns(snap: SnapFn):
     snap(tbl, 42)
 
 
-# ── flex_grow propagation ───────────────────────────────────────────
+# ── grow defaults ──────────────────────────────────────────────────
 
 
-def test_flex_grow_with_fill_column():
+def test_grow_not_propagated_from_cells():
+    """Cell grow is for horizontal distribution, not the table itself."""
     tbl = table(table_row(text("id"), text("name", grow=1)))
-    assert tbl.grow
-
-
-def test_flex_grow_false_without_fill():
-    tbl = table(table_row(text("a"), text("b")))
     assert not tbl.grow
+
+
+def test_grow_explicit():
+    tbl = table(table_row(text("a"), text("b")), grow=1)
+    assert tbl.grow
 
 
 def test_empty_row(snap: SnapFn):

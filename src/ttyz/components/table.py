@@ -33,9 +33,8 @@ def table(
     overflow: str = "visible",
 ) -> Table:
     rows_list = list(rows)
-    r_grow = max((c.grow for r in rows_list for c in r.cells), default=0)
 
-    node = Table((), grow if grow is not None else r_grow, width, height, bg, overflow)
+    node = Table((), grow or 0, width, height, bg, overflow)
     node.rows = rows_list
     node.spacing = spacing
     return node
