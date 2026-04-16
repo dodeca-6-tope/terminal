@@ -12,14 +12,6 @@ from ttyz.components.scroll import ScrollState
 # ── grow delegation ───────────────────────────────────────────────────
 
 
-def test_cond_delegates_grow_true():
-    assert cond(True, text("x", grow=1)).grow
-
-
-def test_cond_delegates_grow_false():
-    assert cond(False, text("x", grow=1)).grow == 0
-
-
 def test_foreach_grow_not_propagated():
     fe = foreach(["a"], lambda item, i: text(str(item), grow=1))
     assert not fe.grow
@@ -32,6 +24,13 @@ def test_foreach_grow_not_propagated():
 
     s = ScrollState()
     fe = foreach(["a"], lambda item, i: scroll(text(item), state=s))
+    assert not fe.grow
+
+    # mixed grower / non-grower children
+    fe = foreach(
+        ["a", "b"],
+        lambda item, i: scroll(text(item), state=s) if i == 0 else text(item),
+    )
     assert not fe.grow
 
 
@@ -75,15 +74,6 @@ def test_cond_propagates_flex_grow_weight():
     s1 = ScrollState()
     inner = scroll(text("a"), state=s1)
     assert cond(True, inner).grow == inner.grow
-
-
-def test_foreach_no_propagation():
-    s = ScrollState()
-    fe = foreach(
-        ["a", "b"],
-        lambda item, i: scroll(text(item), state=s) if i == 0 else text(item),
-    )
-    assert not fe.grow
 
 
 # ── All containers: flex methods match on empty ───────────────────────

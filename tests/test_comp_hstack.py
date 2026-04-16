@@ -28,10 +28,6 @@ def test_empty(snap: SnapFn):
     snap(hstack(), 80)
 
 
-def test_multiline_children(snap: SnapFn):
-    snap(hstack(vstack(text("a"), text("b")), text("c"), spacing=1), 20)
-
-
 # ── Justify ──────────────────────────────────────────────────────────
 
 

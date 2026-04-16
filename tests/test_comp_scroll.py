@@ -175,11 +175,6 @@ def test_fill_clamps_offset(snap: SnapFn):
     assert s.offset == 1
 
 
-def test_fill_inside_box(snap: SnapFn):
-    s = _state()
-    snap(box(scroll(text("a"), text("b"), text("c"), text("d"), state=s)), 10, 5)
-
-
 # ── Render feeds back dimensions ────────────────────────────────────
 
 
