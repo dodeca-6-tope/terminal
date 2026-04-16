@@ -33,7 +33,7 @@ def text(
     else:
         pl = pr = padding
 
-    node = Text((), grow or 0, width, height, bg, overflow)
+    node = Text((), grow if grow is not None else 0, width, height, bg, overflow)
     node.value = value
     node.pl = pl
     node.pr = pr

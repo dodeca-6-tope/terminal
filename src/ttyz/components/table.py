@@ -34,7 +34,7 @@ def table(
 ) -> Table:
     rows_list = list(rows)
 
-    node = Table((), grow or 0, width, height, bg, overflow)
+    node = Table((), grow if grow is not None else 0, width, height, bg, overflow)
     node.rows = rows_list
     node.spacing = spacing
     return node

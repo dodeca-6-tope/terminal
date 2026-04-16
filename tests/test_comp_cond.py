@@ -2,7 +2,7 @@
 
 from conftest import SnapFn
 
-from ttyz import cond, scroll, text
+from ttyz import cond, hstack, scroll, text
 from ttyz.components.scroll import ScrollState
 
 
@@ -51,3 +51,34 @@ def test_height_passed_to_child(snap: SnapFn):
     s = ScrollState()
     c = cond(True, scroll(text("a"), text("b"), text("c"), state=s))
     snap(c, 80, 2)
+
+
+# ── False condition preserves layout params ─────────────────────────
+
+
+def test_false_preserves_explicit_grow():
+    assert cond(False, text("x"), grow=1).grow == 1
+
+
+def test_false_preserves_grow_zero():
+    assert cond(False, text("x"), grow=0).grow == 0
+
+
+def test_false_preserves_width():
+    assert cond(False, text("x"), width="50%").width == "50%"
+
+
+def test_false_preserves_height():
+    assert cond(False, text("x"), height="fill").height == "fill"
+
+
+def test_false_preserves_bg():
+    assert cond(False, text("x"), bg=5).bg == 5
+
+
+def test_false_grow_holds_space_in_hstack(snap: SnapFn):
+    """cond(False, ..., grow=1) should hold its flex slot."""
+    snap(
+        hstack(text("L"), cond(False, text("R"), grow=1), text("E")),
+        20,
+    )

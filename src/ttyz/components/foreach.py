@@ -26,4 +26,6 @@ def foreach(
     overflow: str = "visible",
 ) -> Foreach:
     children = tuple(render_fn(item, i) for i, item in enumerate(items))
-    return Foreach(children, grow or 0, width, height, bg, overflow)
+    return Foreach(
+        children, grow if grow is not None else 0, width, height, bg, overflow
+    )

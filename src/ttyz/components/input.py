@@ -258,7 +258,7 @@ def input(
     bg: int | None = None,
     overflow: str = "visible",
 ) -> Input:
-    node = Input((), grow or 0, width, height, bg, overflow)
+    node = Input((), grow if grow is not None else 0, width, height, bg, overflow)
     node.buffer = ti
     node.placeholder = placeholder
     node.active = active

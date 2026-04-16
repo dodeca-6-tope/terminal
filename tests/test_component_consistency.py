@@ -6,7 +6,20 @@ pass-through, private children, empty render) follow identical rules.
 
 from conftest import SnapFn
 
-from ttyz import Node, cond, foreach, hstack, scroll, text, vstack, zstack
+from ttyz import (
+    Node,
+    cond,
+    foreach,
+    hstack,
+    input,
+    scroll,
+    table,
+    table_row,
+    text,
+    vstack,
+    zstack,
+)
+from ttyz.components.input import InputBuffer
 from ttyz.components.scroll import ScrollState
 
 # ── grow delegation ───────────────────────────────────────────────────
@@ -121,3 +134,44 @@ def test_bg_respects_percentage_width(snap: SnapFn):
 
 def test_bg_without_width_uses_full_parent(snap: SnapFn):
     snap(vstack(text("hi"), bg=1), 40)
+
+
+# ── Explicit grow=0 must be respected ────────────────────────────────
+
+
+def test_explicit_grow_zero_hstack():
+    assert hstack(text("a", grow=1), grow=0).grow == 0
+
+
+def test_explicit_grow_zero_vstack():
+    assert vstack(text("a", grow=1), grow=0).grow == 0
+
+
+def test_explicit_grow_zero_zstack():
+    assert zstack(text("a", grow=1), grow=0).grow == 0
+
+
+def test_explicit_grow_zero_text():
+    assert text("a", grow=0).grow == 0
+
+
+def test_explicit_grow_zero_foreach():
+    assert foreach(["a"], lambda item, i: text(str(item)), grow=0).grow == 0
+
+
+def test_explicit_grow_zero_table():
+    assert table(table_row(text("a")), grow=0).grow == 0
+
+
+def test_explicit_grow_zero_input():
+    assert input(InputBuffer(), grow=0).grow == 0
+
+
+def test_grow_zero_suppresses_flex_in_vstack(snap: SnapFn):
+    """A scroll (default grow=1) wrapped in vstack(grow=0) must not grow."""
+    s = ScrollState()
+    inner = scroll(text("a"), state=s)
+    assert inner.grow == 1
+    v = vstack(inner, grow=0)
+    assert v.grow == 0
+    snap(hstack(v, text("|")), 20, name="grow_zero_suppresses_flex")

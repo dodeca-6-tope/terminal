@@ -171,3 +171,27 @@ def test_flex_distribute_equal_weights(snap: SnapFn):
 def test_flex_distribute_unequal_weights(snap: SnapFn):
     """grow=2 should get twice as much space as grow=1."""
     snap(t.vstack(t.text("A", grow=2, bg=1), t.text("B", grow=1, bg=2)), 10, 9)
+
+
+# ── Style nesting ───────────────────────────────────────────────────
+
+
+def test_nested_bold_color(snap: SnapFn):
+    """bold(color(2, "A") + "B") — B must still be bold after the color ends."""
+    snap(t.text(t.bold(t.color(2, "A") + "B")), 10)
+
+
+def test_nested_bg_fg(snap: SnapFn):
+    """bg(1, color(2, "A") + "B") — B must still have the background."""
+    snap(t.text(t.bg(1, t.color(2, "A") + "B")), 10)
+
+
+def test_nested_italic_underline(snap: SnapFn):
+    """italic(underline("A") + "B") — B must still be italic."""
+    snap(t.text(t.italic(t.underline("A") + "B")), 10)
+
+
+def test_truncate_non_ascii_ansi(snap: SnapFn):
+    """Non-ASCII text with ANSI must truncate without corruption."""
+    styled = t.color(2, "你好世界")
+    snap(t.text(styled, truncation="tail"), 6)

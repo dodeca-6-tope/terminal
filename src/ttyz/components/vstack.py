@@ -24,7 +24,9 @@ def vstack(
 ) -> VStack:
     has_flex = any(c.grow or c.height is not None for c in children)
 
-    node = VStack(children, grow or 0, width, height, bg, overflow)
+    node = VStack(
+        children, grow if grow is not None else 0, width, height, bg, overflow
+    )
     node.spacing = spacing
     node.has_flex = has_flex
     return node

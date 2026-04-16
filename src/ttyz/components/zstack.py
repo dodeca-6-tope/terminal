@@ -30,7 +30,9 @@ def zstack(
     if align_items not in _ALIGNMENTS:
         raise ValueError(f"unknown align_items {align_items!r}")
 
-    node = ZStack(children, grow or 0, width, height, bg, overflow)
+    node = ZStack(
+        children, grow if grow is not None else 0, width, height, bg, overflow
+    )
     node.justify_content = justify_content
     node.align_items = align_items
     return node

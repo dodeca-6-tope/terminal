@@ -21,7 +21,13 @@ def cond(
     overflow: str = "visible",
 ) -> Node:
     if not condition:
-        return Node()
+        return Node(
+            grow=grow if grow is not None else 0,
+            width=width,
+            height=height,
+            bg=bg,
+            overflow=overflow,
+        )
 
     if (
         width is None
