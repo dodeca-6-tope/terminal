@@ -2,7 +2,7 @@
 
 from conftest import SnapFn
 
-from ttyz import box, hstack, scroll, scrollbar, scrollbar_default, text, vstack
+from ttyz import hstack, scroll, scrollbar, scrollbar_default, text, vstack
 from ttyz.components.scroll import ScrollState
 
 
@@ -762,3 +762,61 @@ def test_scrollbar_uses_state_height_not_render_h(snap: SnapFn):
     s = ScrollState()
     s.total = 100
     snap(scrollbar(state=s), 1, 10)
+
+
+# ── Degenerate dimensions ─────────────────────────────────────────
+
+
+def test_zero_height_viewport(snap: SnapFn):
+    """Scroll squeezed to 0 height by fixed siblings should render empty."""
+    s = _state()
+    v = vstack(
+        text("a"),
+        text("b"),
+        text("c"),
+        text("d"),
+        scroll(text("x"), text("y"), state=s),
+    )
+    snap(v, 80, 4)
+    assert s.height == 0
+
+
+def test_content_shrinks_across_renders(snap: SnapFn):
+    """When content shrinks, offset must clamp down."""
+    s = _state(8)
+    snap(
+        scroll(*[text(str(i)) for i in range(10)], state=s),
+        80,
+        2,
+        name="shrink_before",
+    )
+    assert s.offset == 8
+    snap(
+        scroll(*[text(str(i)) for i in range(3)], state=s),
+        80,
+        2,
+        name="shrink_after",
+    )
+    assert s.offset == 1
+
+
+def test_wrapped_text_inside_scroll(snap: SnapFn):
+    """Scroll with wrapped text child: offset counts visual lines."""
+    s = _state(1)
+    snap(scroll(text("hello world foo bar", wrap=True), state=s), 10, 2)
+
+
+def test_scrollbar_zero_total(snap: SnapFn):
+    """Scrollbar with zero total content should not crash (division by zero)."""
+    s = ScrollState()
+    s.height = 5
+    s.total = 0
+    snap(scrollbar(state=s), 1, 5)
+
+
+def test_scrollbar_height_equals_total(snap: SnapFn):
+    """Scrollbar when content exactly fills viewport."""
+    s = ScrollState()
+    s.height = 5
+    s.total = 5
+    snap(scrollbar(state=s), 1, 5)

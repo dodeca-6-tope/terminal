@@ -8,15 +8,19 @@
 
 typedef struct {
     PyObject_HEAD
-    int   width;
-    int   height;
-    Cell *cells;
+    int        width;
+    int        height;
+    Cell      *cells;
+    CellExtra *extras;
+    int        extras_count;
+    int        extras_cap;
 } BufferObject;
 
 static PyTypeObject BufferType; /* forward decl */
 
 static void Buffer_dealloc(BufferObject *self) {
     free(self->cells);
+    free(self->extras);
     Py_TYPE(self)->tp_free((PyObject *)self);
 }
 
@@ -36,13 +40,56 @@ static int Buffer_init(BufferObject *self, PyObject *args, PyObject *kw) {
 
     /* Free previous cells if re-initialized */
     free(self->cells);
+    free(self->extras);
 
     self->width  = w;
     self->height = h;
     self->cells = (Cell *)malloc(n * sizeof(Cell));
     if (!self->cells) { PyErr_NoMemory(); return -1; }
     for (size_t i = 0; i < n; i++) self->cells[i] = BLANK_CELL;
+    self->extras = NULL;
+    self->extras_count = 0;
+    self->extras_cap = 0;
     return 0;
+}
+
+/* ── extras helpers ───────────────────────────────────────────────── */
+
+static void buf_add_extra(BufferObject *buf, int pos, Py_UCS4 cp) {
+    /* Append cp to the extras entry for cell at pos. */
+    for (int i = 0; i < buf->extras_count; i++) {
+        if (buf->extras[i].pos == pos) {
+            if (buf->extras[i].n < CELL_EXTRA_MAX)
+                buf->extras[i].cp[buf->extras[i].n++] = cp;
+            return;
+        }
+    }
+    /* New entry. */
+    if (buf->extras_count >= buf->extras_cap) {
+        int newcap = buf->extras_cap ? buf->extras_cap * 2 : 8;
+        CellExtra *p = (CellExtra *)realloc(buf->extras,
+                                             (size_t)newcap * sizeof(CellExtra));
+        if (!p) return;  /* silent drop on OOM — extras are cosmetic */
+        buf->extras = p;
+        buf->extras_cap = newcap;
+    }
+    CellExtra *e = &buf->extras[buf->extras_count++];
+    e->pos = pos;
+    e->cp[0] = cp;
+    e->n = 1;
+}
+
+static void buf_emit_extras(BufferObject *buf, int pos, OutBuf *out) {
+    for (int i = 0; i < buf->extras_count; i++) {
+        if (buf->extras[i].pos == pos) {
+            char u8[4];
+            for (int j = 0; j < buf->extras[i].n; j++) {
+                int n = encode_utf8(buf->extras[i].cp[j], u8);
+                outbuf_add(out, u8, (size_t)n);
+            }
+            return;
+        }
+    }
 }
 
 /* ── dump ─────────────────────────────────────────────────────────── */
@@ -80,6 +127,7 @@ static PyObject *Buffer_dump(BufferObject *self, PyObject *args) {
             char u8[4];
             int u8len = encode_utf8(ch, u8);
             outbuf_add(&out, u8, (size_t)u8len);
+            buf_emit_extras(self, off + col, &out);
         }
     }
 
@@ -136,6 +184,7 @@ static PyObject *Buffer_diff(BufferObject *self, PyObject *args) {
             Py_UCS4 ch = (c.ch == UNWRITTEN) ? ' ' : c.ch;
             char u8[4];
             outbuf_add(&out, u8, (size_t)encode_utf8(ch, u8));
+            buf_emit_extras(self, off + col, &out);
             col++;
 
             /* Extend run with adjacent dirty cells */
@@ -150,6 +199,7 @@ static PyObject *Buffer_diff(BufferObject *self, PyObject *args) {
                 }
                 Py_UCS4 ch2 = (c2.ch == UNWRITTEN) ? ' ' : c2.ch;
                 outbuf_add(&out, u8, (size_t)encode_utf8(ch2, u8));
+                buf_emit_extras(self, off + col, &out);
                 col++;
             }
         }

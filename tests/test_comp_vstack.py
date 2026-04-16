@@ -111,3 +111,17 @@ def test_height_child_with_height_spec(snap: SnapFn):
     """A child with height='2' is clipped to 2 lines even when parent has more."""
     child = text("content", height="2")
     snap(vstack(child), 80, 10)
+
+
+def test_large_spacing_eats_grower_budget(snap: SnapFn):
+    """When spacing consumes all available height, grower gets zero, not negative."""
+    from ttyz.components.scroll import ScrollState
+
+    s = ScrollState()
+    v = vstack(
+        text("top"),
+        scroll(text("a"), text("b"), state=s),
+        text("bottom"),
+        spacing=10,
+    )
+    snap(v, 80, 5)

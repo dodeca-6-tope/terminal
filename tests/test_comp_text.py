@@ -104,6 +104,36 @@ def test_wrap_wide_char_fallback(snap: SnapFn):
     snap(text("你好世界", wrap=True), 4)
 
 
+def test_wrap_wide_char_odd_width(snap: SnapFn):
+    """Width 5 can't fit a 3rd wide char (needs 6 cells); leftover 1-cell gap."""
+    snap(text("你好世界", wrap=True), 5)
+
+
+def test_wrap_mixed_wide_and_ascii(snap: SnapFn):
+    """ASCII + wide chars mixed: width accounting must handle both."""
+    snap(text("a你好世界b", wrap=True), 7)
+
+
+def test_wrap_emoji_zwj(snap: SnapFn):
+    """Multi-codepoint ZWJ emoji must not be split mid-sequence."""
+    snap(text("ab👩‍🔧cd", wrap=True), 4)
+
+
+def test_wrap_leading_trailing_whitespace(snap: SnapFn):
+    """Significant whitespace around words must not shift break positions."""
+    snap(text("  hello  world  ", wrap=True), 8)
+
+
+def test_wrap_long_word_then_short(snap: SnapFn):
+    """After a long word folds, the next short word continues on the last fold line."""
+    snap(text("abcdefghij foo", wrap=True), 5)
+
+
+def test_wrap_tab_characters(snap: SnapFn):
+    """Tab characters in wrapped text must not crash or produce wrong widths."""
+    snap(text("a\tb\tc", wrap=True), 10)
+
+
 def test_wrap_preserves_short_line(snap: SnapFn):
     snap(text("hi", wrap=True), 80)
 

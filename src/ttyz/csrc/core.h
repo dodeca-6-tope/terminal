@@ -65,6 +65,17 @@ typedef struct {
 #define UNWRITTEN  1   /* ch == 1 marks an unwritten cell */
 #define BLANK_CELL ((Cell){UNWRITTEN, STYLE_EMPTY})
 
+/* ── Per-cell extra codepoints (ZWJ, VS16, continuation) ──────────── */
+/* Stored in a side table on the Buffer so Cell stays 16 bytes.        */
+
+#define CELL_EXTRA_MAX 3
+
+typedef struct {
+    int     pos;                    /* cell index (row * width + col) */
+    Py_UCS4 cp[CELL_EXTRA_MAX];
+    uint8_t n;
+} CellExtra;
+
 /* ── Growable byte buffer ──────────────────────────────────────────── */
 
 typedef struct {
@@ -250,6 +261,24 @@ static inline Py_ssize_t skip_escape(const void *data, int kind,
     return pos + 2;
 }
 
+/* Skip past a ZWJ emoji continuation: (FE0F? 200D visible_char)*.
+   Call after consuming a wide (cw >= 2) base character.
+   Returns the number of additional codepoints consumed. */
+static inline Py_ssize_t skip_zwj_tail(const void *data, int kind,
+                                        Py_ssize_t pos, Py_ssize_t len) {
+    Py_ssize_t start = pos;
+    while (pos < len) {
+        Py_UCS4 ch = PyUnicode_READ(kind, data, pos);
+        if (ch == 0xFE0F) { pos++; continue; }          /* VS16 */
+        if (ch == 0x200D && pos + 1 < len) {             /* ZWJ */
+            Py_UCS4 after = PyUnicode_READ(kind, data, pos + 1);
+            if (cwidth(after) >= 1) { pos += 2; continue; }
+        }
+        break;
+    }
+    return pos - start;
+}
+
 /* Compute display width of a Python unicode string (ANSI-aware). */
 static int str_display_width(PyObject *s) {
     Py_ssize_t len = PyUnicode_GET_LENGTH(s);
@@ -265,8 +294,11 @@ static int str_display_width(PyObject *s) {
     for (Py_ssize_t pos = 0; pos < len; ) {
         Py_UCS4 ch = PyUnicode_READ(kind, data, pos);
         if (ch == 0x1B) { pos = skip_escape(data, kind, pos, len); continue; }
-        width += cwidth(ch);
+        int cw = cwidth(ch);
+        width += cw;
         pos++;
+        /* Skip ZWJ continuations — the cluster counts as one glyph. */
+        if (cw >= 2) pos += skip_zwj_tail(data, kind, pos, len);
     }
     return width;
 }

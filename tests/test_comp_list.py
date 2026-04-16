@@ -85,6 +85,14 @@ def test_set_items_to_empty():
     assert s.current is None
 
 
+def test_empty_string_items():
+    """Items with empty keys should still be tracked, not collapsed."""
+    s = ListState(_items("", "b", ""))
+    assert s.total == 3
+    s.move_to(2)
+    assert s.cursor == 2
+
+
 def test_set_items_updates_render(snap: SnapFn):
     from ttyz import list, text
     from ttyz.components.base import Node

@@ -492,6 +492,27 @@ static int wrap_line_into(PyObject *line, int width, PyObject *out) {
                 w += cw;
                 cut++;
             }
+            /* Avoid splitting ZWJ emoji sequences (e.g. 👩‍🔧).
+               If cut lands right after a ZWJ, backtrack to before
+               the cluster so the whole sequence stays on one line. */
+            {
+                Py_ssize_t safe = cut;
+                while (safe > 0) {
+                    Py_UCS4 prev = PyUnicode_READ(wkind, wdata, safe - 1);
+                    if (prev != 0x200D) break;
+                    /* Back past ZWJ */
+                    safe--;
+                    /* Back past zero-width modifiers (VS, combining) */
+                    while (safe > 0) {
+                        Py_UCS4 ch = PyUnicode_READ(wkind, wdata, safe - 1);
+                        if (cwidth(ch) == 0 && ch != 0x200D) safe--;
+                        else break;
+                    }
+                    /* Back past the base character */
+                    if (safe > 0) safe--;
+                }
+                if (safe > 0 && safe < cut) cut = safe;
+            }
             if (cut == 0) cut = 1;
             PyObject *chunk = PyUnicode_Substring(word, 0, cut);
             if (!chunk) { err = 1; break; }

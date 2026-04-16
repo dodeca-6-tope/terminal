@@ -382,11 +382,33 @@ static void parse_line_into(BufferObject *buf, int x, int y, int max_w,
         cells[col] = (Cell){ch, style};
         if (cw == 2) {
             cells[col + 1] = (Cell){WIDE_CHAR, style};
+            /* Absorb ZWJ continuation into side table extras. */
+            int cell_pos = y * bw + col;
+            Py_ssize_t tail_start = pos + 1;
+            while (tail_start < len) {
+                Py_UCS4 nc = PyUnicode_READ(kind, data, tail_start);
+                if (nc == 0xFE0F) {                          /* VS16 */
+                    buf_add_extra(buf, cell_pos, nc);
+                    tail_start++;
+                    continue;
+                }
+                if (nc == 0x200D && tail_start + 1 < len) {  /* ZWJ + next */
+                    Py_UCS4 after = PyUnicode_READ(kind, data, tail_start + 1);
+                    if (cwidth(after) >= 1) {
+                        buf_add_extra(buf, cell_pos, nc);
+                        buf_add_extra(buf, cell_pos, after);
+                        tail_start += 2;
+                        continue;
+                    }
+                }
+                break;
+            }
+            pos = tail_start;
             col += 2;
         } else {
             col++;
+            pos++;
         }
-        pos++;
     }
 }
 

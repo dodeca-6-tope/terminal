@@ -236,3 +236,11 @@ def test_nested_grow_content_does_not_inflate_parent(snap: SnapFn):
     content = vstack(text("x" * 200, truncation="end"), grow=1)
     main = box(content, grow=1, padding=1)
     snap(hstack(sidebar, main, spacing=1), 40)
+
+
+# ── Percentage + spacing interaction ───────────────────────────────
+
+
+def test_percentage_width_with_spacing(snap: SnapFn):
+    """Percentage width + spacing must not overflow the parent."""
+    snap(hstack(text("A", width="50%"), text("B"), spacing=2), 20)

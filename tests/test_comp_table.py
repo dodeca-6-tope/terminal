@@ -64,3 +64,25 @@ def test_flex_grow_false_without_fill():
 def test_empty_row(snap: SnapFn):
     """A TableRow with zero cells should render without crashing."""
     snap(table(table_row(text("a"), text("b")), table_row()), 80)
+
+
+# ── Edge cases from other frameworks ────────────────────────────────
+
+
+def test_ansi_in_cell_values(snap: SnapFn):
+    """ANSI escapes in cell values must not inflate column widths."""
+    from ttyz import bold
+
+    tbl = table(
+        table_row(text(bold("Name")), text("Age")),
+        table_row(text("alice"), text("30")),
+    )
+    snap(tbl, 30)
+
+
+def test_extreme_narrow_width(snap: SnapFn):
+    """Table at a width too small for content should not crash."""
+    tbl = table(
+        table_row(text("hello"), text("world")),
+    )
+    snap(tbl, 3)

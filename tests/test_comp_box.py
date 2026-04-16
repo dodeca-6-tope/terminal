@@ -133,6 +133,21 @@ def test_narrow_box_title_does_not_overflow(snap: SnapFn):
     snap(box(text(""), title="title"), 4)
 
 
+def test_minimum_size(snap: SnapFn):
+    """Box at width=1 and height=1 should not crash."""
+    snap(box(text("hello")), 1, 1)
+
+
+def test_nested_box(snap: SnapFn):
+    """Inner box border chars must not clash with outer box clipping."""
+    snap(box(box(text("hi"))), 15)
+
+
+def test_styled_title(snap: SnapFn):
+    """ANSI-styled title must not bleed color into border characters."""
+    snap(box(text("body"), title=bold("Title")), 20)
+
+
 def test_box_interior_opaque_over_content(snap: SnapFn):
     """Box must overwrite background content — interior is not transparent."""
     snap(zstack(text("X" * 20), box(text("hi"))), 20, 5)

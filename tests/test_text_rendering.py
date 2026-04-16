@@ -135,6 +135,16 @@ def test_long_wide_text(snap: SnapFn):
     snap(t.text("你" * 100), 200)
 
 
+def test_incomplete_osc_no_payload_leak(snap: SnapFn):
+    """Unterminated OSC sequence must not leak its payload into visible text."""
+    snap(t.text("\x1b]8;;https://example.com"), 20)
+
+
+def test_esc_charset_designation_stripped(snap: SnapFn):
+    """ESC( character set designation should not appear as visible text."""
+    snap(t.text("\x1b(Bhello"), 10)
+
+
 def test_non_sgr_csi_in_text(snap: SnapFn):
     """Non-SGR CSI (like cursor move) should not corrupt cell content."""
     snap(t.text("AB\033[1;1HCD"), 10)
