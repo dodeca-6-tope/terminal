@@ -32,7 +32,9 @@ _EXIT = "\033[?1006l\033[?1000l\033[?1004l\033[?2004l\033[?7h\033[?25h\033[?1049
 class TTY:
     """Context manager for full-screen terminal UI sessions."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self, size: Callable[[], os.terminal_size] = os.get_terminal_size
+    ) -> None:
         self._fd: int | None = None
         self._saved: list[Any] | None = None
         self._active = False
@@ -42,6 +44,7 @@ class TTY:
         self._keys: KeyReader | None = None
         self._prev: Buffer | None = None
         self._wake_r, self._wake_w = os.pipe()
+        self._size = size
         atexit.register(self.cleanup)
 
     def __enter__(self) -> TTY:
@@ -100,14 +103,14 @@ class TTY:
 
     def draw(self, node: object) -> None:
         """Draw a node tree to the terminal with cell-level diffing."""
-        size = os.get_terminal_size()
+        size = self._size()
         prev = self._prev
 
         buf = Buffer(size.columns, size.lines)
         render_to_buffer(node, buf)
 
         if prev is None or (buf.width, buf.height) != (prev.width, prev.height):
-            body = f"\033[H\033[0m{buf.dump()}"
+            body = f"\033[H\033[2J\033[0m{buf.dump()}"
         else:
             body = buf.diff(prev)
 
@@ -127,7 +130,7 @@ class TTY:
     @property
     def size(self) -> os.terminal_size:
         """Current terminal dimensions (columns, lines)."""
-        return os.get_terminal_size()
+        return self._size()
 
     def wake(self) -> None:
         """Wake the event loop from any thread."""

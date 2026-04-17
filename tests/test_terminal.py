@@ -259,6 +259,20 @@ def test_no_fd_leak_after_exit() -> None:
     assert after == before
 
 
+def test_full_redraw_does_not_leave_stale_cells(
+    capfdbinary: pytest.CaptureFixture[bytes],
+) -> None:
+    """Full-redraw path (first draw / after resize) must clear the screen
+    so residue from the prior frame doesn't linger."""
+    from ttyz.components import text
+
+    sys.stdout.buffer.write(b"STALE")
+    sys.stdout.flush()
+    Terminal(size=lambda: os.terminal_size((20, 4))).draw(text("ok"))
+    out = capfdbinary.readouterr().out
+    assert 0 <= out.find(b"\x1b[2J") < out.rfind(b"ok")
+
+
 def test_no_fd_leak_without_entering_context() -> None:
     """Creating a TTY and calling cleanup() without entering should not leak fds."""
     before = _count_fds()
