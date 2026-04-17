@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from ttyz.components.base import Node
+from ttyz.components.base import Node, Overflow
 from ttyz.keys import Event, Key, Paste
 
 
@@ -245,6 +245,9 @@ class Input(Node):
     """Text input node."""
 
     __slots__ = ("buffer", "placeholder", "active")
+    buffer: InputBuffer
+    placeholder: str
+    active: bool
 
 
 def input(
@@ -256,7 +259,7 @@ def input(
     height: str | None = None,
     grow: int = 0,
     bg: int | None = None,
-    overflow: str = "visible",
+    overflow: Overflow = "visible",
 ) -> Input:
     node = Input((), grow, width, height, bg, overflow)
     node.buffer = ti

@@ -119,16 +119,6 @@ def test_flex_grow_delegates():
     assert not box(text("a")).grow
 
 
-# ── Validation ───────────────────────────────────────────────────────
-
-
-def test_invalid_style_raises():
-    import pytest
-
-    with pytest.raises(ValueError, match="unknown border style"):
-        box(text("x"), style="fancy")
-
-
 def test_narrow_box_title_does_not_overflow(snap: SnapFn):
     snap(box(text(""), title="title"), 4)
 

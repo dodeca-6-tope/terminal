@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from ttyz.components.base import Node
+from typing import Literal, TypeAlias
+
+from ttyz.components.base import Node, Overflow
+
+Truncation: TypeAlias = Literal["head", "middle", "tail"]
 
 
 class Text(Node):
@@ -13,20 +17,20 @@ class Text(Node):
     pl: int
     pr: int
     wrap: bool
-    truncation: str | None
+    truncation: Truncation | None
 
 
 def text(
     value: str = "",
     *,
     wrap: bool = False,
-    truncation: str | None = None,
+    truncation: Truncation | None = None,
     padding: int | tuple[int, int] = 0,
     width: str | None = None,
     height: str | None = None,
     grow: int = 0,
     bg: int | None = None,
-    overflow: str = "visible",
+    overflow: Overflow = "visible",
 ) -> Text:
     if isinstance(padding, tuple):
         pl, pr = padding

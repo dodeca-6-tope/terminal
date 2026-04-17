@@ -3,7 +3,7 @@
 from conftest import SnapFn
 
 from ttyz import box, cond, text, vstack, zstack
-from ttyz.components.base import Custom
+from ttyz.components.base import Align, Custom
 from ttyz.components.scroll import ScrollState
 
 
@@ -65,7 +65,7 @@ def test_all_children_render_within_canvas(snap: SnapFn):
 def test_all_9_alignments(snap: SnapFn):
     canvas_w, canvas_h = 20, 7
     overlay = _block("X", 3, 3)
-    for jc, ai in [
+    cases: list[tuple[Align, Align]] = [
         ("start", "start"),
         ("center", "start"),
         ("end", "start"),
@@ -75,7 +75,8 @@ def test_all_9_alignments(snap: SnapFn):
         ("start", "end"),
         ("center", "end"),
         ("end", "end"),
-    ]:
+    ]
+    for jc, ai in cases:
         snap(
             zstack(overlay, justify_content=jc, align_items=ai),
             canvas_w,
@@ -187,7 +188,7 @@ def test_nested_zstack_positions_correctly(snap: SnapFn):
 def test_block_positioned_at_all_9_spots(snap: SnapFn):
     outer_w, outer_h = 30, 9
     block = _block("B", 6, 3)
-    for jc, ai in [
+    cases: list[tuple[Align, Align]] = [
         ("start", "start"),
         ("center", "start"),
         ("end", "start"),
@@ -197,7 +198,8 @@ def test_block_positioned_at_all_9_spots(snap: SnapFn):
         ("start", "end"),
         ("center", "end"),
         ("end", "end"),
-    ]:
+    ]
+    for jc, ai in cases:
         snap(
             zstack(block, justify_content=jc, align_items=ai),
             outer_w,
@@ -210,7 +212,7 @@ def test_nested_zstack_at_all_9_spots(snap: SnapFn):
     outer_w, outer_h = 30, 9
     inner_base = _block("B", 6, 3)
     inner_overlay = _block("X", 2, 1)
-    for jc, ai in [
+    cases: list[tuple[Align, Align]] = [
         ("start", "start"),
         ("center", "start"),
         ("end", "start"),
@@ -220,7 +222,8 @@ def test_nested_zstack_at_all_9_spots(snap: SnapFn):
         ("start", "end"),
         ("center", "end"),
         ("end", "end"),
-    ]:
+    ]
+    for jc, ai in cases:
         combo = zstack(
             inner_base,
             inner_overlay,
@@ -315,23 +318,6 @@ def test_overlay_on_wide_char_base(snap: SnapFn):
         ),
         8,
     )
-
-
-# ── Validation ───────────────────────────────────────────────────
-
-
-def test_invalid_justify_content_raises():
-    import pytest
-
-    with pytest.raises(ValueError, match="unknown justify_content"):
-        zstack(text("x"), justify_content="middle")
-
-
-def test_invalid_align_items_raises():
-    import pytest
-
-    with pytest.raises(ValueError, match="unknown align_items"):
-        zstack(text("x"), align_items="middle")
 
 
 # ── ANSI handling ───────────────────────────────────────────────────

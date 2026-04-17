@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from ttyz.components.base import Node
+from typing import Literal, TypeAlias
 
-BORDERS: dict[str, tuple[str, str, str, str, str, str]] = {
+from ttyz.components.base import Node, Overflow
+
+BorderStyle: TypeAlias = Literal["rounded", "normal", "double", "heavy"]
+
+BORDERS: dict[BorderStyle, tuple[str, str, str, str, str, str]] = {
     # (top_left, top_right, bottom_left, bottom_right, horizontal, vertical)
     "rounded": ("╭", "╮", "╰", "╯", "─", "│"),
     "normal": ("┌", "┐", "└", "┘", "─", "│"),
@@ -17,7 +21,7 @@ class Box(Node):
     """Box node — border around a single child."""
 
     __slots__ = ("style", "title", "padding")
-    style: str
+    style: BorderStyle
     title: str
     padding: int
 
@@ -25,18 +29,15 @@ class Box(Node):
 def box(
     child: Node,
     *,
-    style: str = "rounded",
+    style: BorderStyle = "rounded",
     title: str = "",
     padding: int = 0,
     width: str | None = None,
     height: str | None = None,
     grow: int | None = None,
     bg: int | None = None,
-    overflow: str = "visible",
+    overflow: Overflow = "visible",
 ) -> Box:
-    if style not in BORDERS:
-        raise ValueError(f"unknown border style {style!r}")
-
     node = Box(
         (child,),
         grow if grow is not None else child.grow,

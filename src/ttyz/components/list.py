@@ -6,7 +6,7 @@ import builtins
 from collections.abc import Callable
 from typing import Generic, TypeVar
 
-from ttyz.components.base import Node
+from ttyz.components.base import Node, Overflow
 from ttyz.components.keyed import Keyed
 from ttyz.components.scroll import Scroll, ScrollState, scroll
 
@@ -66,7 +66,7 @@ def list(
     height: str | None = None,
     grow: int | None = None,
     bg: int | None = None,
-    overflow: str = "visible",
+    overflow: Overflow = "visible",
 ) -> Scroll:
     state.cursor = state.clamp(state.cursor)
     state.scroll.scroll_to_visible(state.cursor)

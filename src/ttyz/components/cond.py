@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ttyz.components.base import Node
+from ttyz.components.base import Node, Overflow
 
 
 class Cond(Node):
@@ -18,7 +18,7 @@ def cond(
     height: str | None = None,
     grow: int | None = None,
     bg: int | None = None,
-    overflow: str = "visible",
+    overflow: Overflow = "visible",
 ) -> Node:
     if not condition:
         return Node(

@@ -120,16 +120,6 @@ def test_justify_does_not_imply_grow():
     assert not hstack(text("a"), justify_content="between").grow
 
 
-# ── Validation ──────────────────────────────────────────────────────
-
-
-def test_invalid_justify_content_raises():
-    import pytest
-
-    with pytest.raises(ValueError, match="unknown justify_content"):
-        hstack(text("x"), justify_content="spread")
-
-
 # ── Height propagation ─────────────────────────────────────────────
 
 
@@ -233,7 +223,7 @@ def test_nested_grow_content_does_not_inflate_parent(snap: SnapFn):
     from ttyz import box
 
     sidebar = text("SIDE", width="6")
-    content = vstack(text("x" * 200, truncation="end"), grow=1)
+    content = vstack(text("x" * 200, truncation="tail"), grow=1)
     main = box(content, grow=1, padding=1)
     snap(hstack(sidebar, main, spacing=1), 40)
 

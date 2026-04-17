@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from ttyz.components.base import Node
+from ttyz.components.base import Node, Overflow
 from ttyz.components.scroll import ScrollState
 from ttyz.style import dim
 
@@ -38,7 +38,7 @@ def scrollbar(
     height: str | None = None,
     grow: int | None = None,
     bg: int | None = None,
-    overflow: str = "visible",
+    overflow: Overflow = "visible",
 ) -> Scrollbar:
     node = Scrollbar((), grow if grow is not None else 1, width, height, bg, overflow)
     node.state = state

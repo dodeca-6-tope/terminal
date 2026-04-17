@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ttyz.components.base import Node
+from ttyz.components.base import Node, Overflow
 
 
 class TableRow:
@@ -30,7 +30,7 @@ def table(
     height: str | None = None,
     grow: int = 0,
     bg: int | None = None,
-    overflow: str = "visible",
+    overflow: Overflow = "visible",
 ) -> Table:
     rows_list = list(rows)
 

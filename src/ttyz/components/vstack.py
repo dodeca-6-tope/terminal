@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ttyz.components.base import Node
+from ttyz.components.base import Node, Overflow
 
 
 class VStack(Node):
@@ -20,7 +20,7 @@ def vstack(
     height: str | None = None,
     grow: int = 0,
     bg: int | None = None,
-    overflow: str = "visible",
+    overflow: Overflow = "visible",
 ) -> VStack:
     has_flex = any(c.grow or c.height is not None for c in children)
 

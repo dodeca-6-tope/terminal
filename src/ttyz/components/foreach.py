@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import TypeVar
 
-from ttyz.components.base import Node
+from ttyz.components.base import Node, Overflow
 
 T = TypeVar("T")
 
@@ -23,7 +23,7 @@ def foreach(
     height: str | None = None,
     grow: int = 0,
     bg: int | None = None,
-    overflow: str = "visible",
+    overflow: Overflow = "visible",
 ) -> Foreach:
     children = tuple(render_fn(item, i) for i, item in enumerate(items))
     return Foreach(children, grow, width, height, bg, overflow)
