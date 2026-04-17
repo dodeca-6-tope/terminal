@@ -217,14 +217,20 @@ def test_wrap_at_zero_inner_width(snap: SnapFn):
     snap(text("hello", wrap=True, padding=(5, 0)), 5)
 
 
-def test_head_truncation_strips_ansi(snap: SnapFn):
-    """Known limitation: head truncation operates on stripped text."""
+def test_tail_truncation_preserves_ansi(snap: SnapFn):
+    snap(text(color(1, "hello world here"), truncation="tail"), 10)
+
+
+def test_head_truncation_preserves_ansi(snap: SnapFn):
     snap(text(color(1, "hello world here"), truncation="head"), 10)
 
 
-def test_middle_truncation_strips_ansi(snap: SnapFn):
-    """Known limitation: middle truncation operates on stripped text."""
-    snap(text(bold("hello world here"), truncation="middle"), 10)
+def test_middle_truncation_preserves_ansi(snap: SnapFn):
+    snap(text(color(1, "hello world here"), truncation="middle"), 10)
+
+
+def test_truncation_preserves_ansi_when_fits(snap: SnapFn):
+    snap(text(color(4, "●"), truncation="tail"), 6)
 
 
 def test_non_string_value(snap: SnapFn):

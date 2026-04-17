@@ -1,143 +1,8 @@
 /*
  * text.c — Text string utilities.
  *
- * display_width, strip_ansi, truncate, slice_at_width,
- * truncate_line, wrap_line_into — used by render.c.
+ * truncate, truncate_line, wrap_line_into — used by render.c.
  */
-
-/* ── display_width ────────────────────────────────────────────────── */
-
-static PyObject *mod_display_width(PyObject *self, PyObject *arg) {
-    if (!PyUnicode_Check(arg)) {
-        PyErr_SetString(PyExc_TypeError, "expected a string");
-        return NULL;
-    }
-    return PyLong_FromLong(str_display_width(arg));
-}
-
-/* ── strip_ansi ──────────────────────────────────────────────────── */
-/*
- * strip_ansi(s) -> str
- *
- * Remove all escape sequences (CSI, OSC, etc.) from a string.
- * Bulk-copies spans between escapes instead of encoding char-by-char.
- */
-static PyObject *mod_strip_ansi(PyObject *self, PyObject *arg) {
-    if (!PyUnicode_Check(arg)) {
-        PyErr_SetString(PyExc_TypeError, "expected a string");
-        return NULL;
-    }
-
-    Py_ssize_t len = PyUnicode_GET_LENGTH(arg);
-
-    /* Fast: no ESC at all. */
-    if (PyUnicode_FindChar(arg, 0x1B, 0, len, 1) < 0) {
-        Py_INCREF(arg);
-        return arg;
-    }
-
-    /* ASCII fast path: work directly with bytes, bulk-copy spans. */
-    if (PyUnicode_IS_ASCII(arg)) {
-        const char *src = PyUnicode_AsUTF8(arg);
-        char *buf = (char *)malloc((size_t)len);
-        if (!buf) return PyErr_NoMemory();
-        Py_ssize_t out = 0;
-        Py_ssize_t pos = 0;
-        while (pos < len) {
-            /* Find next ESC. */
-            Py_ssize_t esc = pos;
-            while (esc < len && src[esc] != '\033') esc++;
-            /* Copy span before ESC. */
-            if (esc > pos) {
-                memcpy(buf + out, src + pos, (size_t)(esc - pos));
-                out += esc - pos;
-            }
-            if (esc >= len) break;
-            /* Skip escape sequence (CSI, OSC, or other). */
-            pos = skip_escape_ascii(src, esc, len);
-        }
-        PyObject *result = PyUnicode_FromStringAndSize(buf, out);
-        free(buf);
-        return result;
-    }
-
-    /* Non-ASCII: scan codepoints, bulk-copy via PyUnicode_Substring. */
-    int kind = PyUnicode_KIND(arg);
-    const void *data = PyUnicode_DATA(arg);
-
-    /* Single pass: count non-escape characters and find max codepoint. */
-    Py_ssize_t out_len = 0;
-    Py_UCS4 maxchar = 0;
-    for (Py_ssize_t pos = 0; pos < len; ) {
-        Py_UCS4 ch = PyUnicode_READ(kind, data, pos);
-        if (ch == 0x1B) {
-            pos = skip_escape(data, kind, pos, len);
-        } else {
-            if (ch > maxchar) maxchar = ch;
-            out_len++;
-            pos++;
-        }
-    }
-
-    PyObject *result = PyUnicode_New(out_len, maxchar);
-    if (!result) return NULL;
-
-    int out_kind = PyUnicode_KIND(result);
-    void *out_data = PyUnicode_DATA(result);
-    Py_ssize_t out_pos = 0;
-    for (Py_ssize_t pos = 0; pos < len; ) {
-        Py_UCS4 ch = PyUnicode_READ(kind, data, pos);
-        if (ch == 0x1B) {
-            pos = skip_escape(data, kind, pos, len);
-        } else {
-            PyUnicode_WRITE(out_kind, out_data, out_pos++, ch);
-            pos++;
-        }
-    }
-
-    return result;
-}
-
-/* ── slice_at_width ──────────────────────────────────────────────── */
-/*
- * slice_at_width(s, max_width) -> str
- *
- * Slice a plain (non-ANSI) string to fit within max_width display columns.
- */
-static PyObject *mod_slice_at_width(PyObject *self, PyObject *args) {
-    PyObject *s;
-    int max_width;
-    if (!PyArg_ParseTuple(args, "Ui", &s, &max_width))
-        return NULL;
-
-    if (max_width <= 0)
-        return PyUnicode_FromStringAndSize("", 0);
-
-    Py_ssize_t len = PyUnicode_GET_LENGTH(s);
-
-    /* ASCII fast path: width == length. */
-    if (PyUnicode_IS_ASCII(s)) {
-        if (len <= max_width) {
-            Py_INCREF(s);
-            return s;
-        }
-        return PyUnicode_Substring(s, 0, max_width);
-    }
-
-    /* Wide-char scan. */
-    int kind = PyUnicode_KIND(s);
-    const void *data = PyUnicode_DATA(s);
-    int w = 0;
-    for (Py_ssize_t i = 0; i < len; i++) {
-        Py_UCS4 ch = PyUnicode_READ(kind, data, i);
-        int cw = cwidth(ch);
-        if (w + cw > max_width)
-            return PyUnicode_Substring(s, 0, i);
-        w += cw;
-    }
-    Py_INCREF(s);
-    return s;
-}
 
 /* ── truncate ────────────────────────────────────────────────────── */
 /*
@@ -315,16 +180,116 @@ static PyObject *mod_truncate(PyObject *self, PyObject *args, PyObject *kw) {
     return outbuf_to_pystr(&ob);
 }
 
+/* ── slice_ansi_visible ───────────────────────────────────────────── */
+/*
+ * Extract the substring occupying visible columns [vis_start, vis_end)
+ * while preserving every escape sequence in the source verbatim, so
+ * SGR state (colors, attributes) carries through into the slice.
+ */
+static PyObject *slice_ansi_visible(PyObject *s, int vis_start, int vis_end) {
+    Py_ssize_t len = PyUnicode_GET_LENGTH(s);
+    int kind = PyUnicode_KIND(s);
+    const void *data = PyUnicode_DATA(s);
+
+    OutBuf ob;
+    if (outbuf_init(&ob, (size_t)len) < 0) return PyErr_NoMemory();
+
+    int vi = 0;
+    for (Py_ssize_t pos = 0; pos < len; ) {
+        Py_UCS4 ch = PyUnicode_READ(kind, data, pos);
+        if (ch == 0x1B) {
+            Py_ssize_t end = skip_escape(data, kind, pos, len);
+            for (Py_ssize_t k = pos; k < end; k++) {
+                char u8[4];
+                Py_UCS4 ec = PyUnicode_READ(kind, data, k);
+                outbuf_add(&ob, u8, (size_t)encode_utf8(ec, u8));
+            }
+            pos = end;
+        } else {
+            int cw = cwidth(ch);
+            if (vi >= vis_start && vi + cw <= vis_end) {
+                char u8[4];
+                outbuf_add(&ob, u8, (size_t)encode_utf8(ch, u8));
+            }
+            vi += cw;
+            pos++;
+        }
+    }
+    return outbuf_to_pystr(&ob);
+}
+
+/* Visible width of a string, skipping ANSI escapes. */
+static int visible_width_ansi(PyObject *s) {
+    Py_ssize_t len = PyUnicode_GET_LENGTH(s);
+    int kind = PyUnicode_KIND(s);
+    const void *data = PyUnicode_DATA(s);
+    int vw = 0;
+    for (Py_ssize_t pos = 0; pos < len; ) {
+        Py_UCS4 ch = PyUnicode_READ(kind, data, pos);
+        if (ch == 0x1B) {
+            pos = skip_escape(data, kind, pos, len);
+        } else {
+            vw += cwidth(ch);
+            pos++;
+        }
+    }
+    return vw;
+}
+
 /* ── truncate_line (head / middle / tail) ─────────────────────────── */
 /*
  * Truncate a single line to `width` visible columns with ellipsis.
- * Operates on stripped (non-ANSI) text.  Returns a new Python string.
+ * Preserves ANSI escape sequences so colored text stays colored after
+ * truncation. Returns a new Python string.
  */
 static PyObject *truncate_line(PyObject *raw_line, int width, char mode) {
-    /* Strip ANSI before truncating — head/middle/tail all operate on
-       plain text.  If no escapes, stripped == raw_line (fast path). */
-    PyObject *line = mod_strip_ansi(NULL, raw_line);
-    if (!line) return NULL;
+    Py_ssize_t rlen = PyUnicode_GET_LENGTH(raw_line);
+    int has_esc = (PyUnicode_FindChar(raw_line, 0x1B, 0, rlen, 1) >= 0);
+
+    /* ANSI-aware path. */
+    if (has_esc) {
+        int vw = visible_width_ansi(raw_line);
+        if (vw <= width) {
+            Py_INCREF(raw_line);
+            return raw_line;
+        }
+        if (width <= 0)
+            return PyUnicode_FromStringAndSize("", 0);
+
+        PyObject *ell = PyUnicode_FromString("\xe2\x80\xa6");
+        if (!ell) return NULL;
+        PyObject *result = NULL;
+
+        if (mode == 'h') {
+            int budget = width - 1;
+            PyObject *right = slice_ansi_visible(raw_line, vw - budget, vw);
+            if (!right) { Py_DECREF(ell); return NULL; }
+            result = PyUnicode_Concat(ell, right);
+            Py_DECREF(right);
+        } else if (mode == 'm') {
+            int left_w = (width - 1) / 2;
+            int right_w = width - 1 - left_w;
+            PyObject *left = slice_ansi_visible(raw_line, 0, left_w);
+            if (!left) { Py_DECREF(ell); return NULL; }
+            PyObject *right = slice_ansi_visible(raw_line, vw - right_w, vw);
+            if (!right) { Py_DECREF(left); Py_DECREF(ell); return NULL; }
+            result = PyUnicode_FromFormat("%U%U%U", left, ell, right);
+            Py_DECREF(left);
+            Py_DECREF(right);
+        } else {
+            int budget = width - 1;
+            PyObject *left = slice_ansi_visible(raw_line, 0, budget);
+            if (!left) { Py_DECREF(ell); return NULL; }
+            result = PyUnicode_Concat(left, ell);
+            Py_DECREF(left);
+        }
+        Py_DECREF(ell);
+        return result;
+    }
+
+    /* Plain text path: operate on raw_line directly. */
+    PyObject *line = raw_line;
+    Py_INCREF(line);
 
     int dw = str_display_width(line);
     if (dw <= width) {
