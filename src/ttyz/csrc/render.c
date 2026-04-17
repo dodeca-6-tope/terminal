@@ -5,8 +5,7 @@
  * bypassing intermediate list[str] and ANSI re-parsing.
  *
  * All node types are handled in C: Text, HStack, VStack, ZStack, Box,
- * Scroll, Table, Foreach, Cond, Spacer, Input, Scrollbar, ListView,
- * Custom.
+ * Scroll, Table, Foreach, Cond, Spacer, Input, Scrollbar, Custom.
  */
 
 /* ── Forward declarations ─────────────────────────────────────────── */
@@ -35,7 +34,6 @@ static PyTypeObject *ForeachType_;
 static PyTypeObject *ScrollType_;
 static PyTypeObject *ScrollbarType_;
 static PyTypeObject *TableType_;
-static PyTypeObject *ListViewType_;
 static PyTypeObject *InputType_;
 
 /* Interned attribute name strings. */
@@ -71,10 +69,8 @@ static PyObject *a_placeholder;
 static PyObject *a_total;
 static PyObject *a_wrap;
 static PyObject *a_render_fn;
-static PyObject *a_cursor;
 static PyObject *a_items;
 static PyObject *a_scroll;
-static PyObject *a_key;
 static PyObject *a_cache;
 
 /* Interned constant strings. */
@@ -114,15 +110,14 @@ static Py_ssize_t off_zstack_jc, off_zstack_ai;
 /* Box */
 static Py_ssize_t off_box_style, off_box_title, off_box_padding;
 /* Scroll */
-static Py_ssize_t off_scroll_state;
+static Py_ssize_t off_scroll_state, off_scroll_items,
+                  off_scroll_render_fn, off_scroll_cache;
 /* Spacer */
 static Py_ssize_t off_spacer_min_length;
 /* Input */
 static Py_ssize_t off_input_buffer, off_input_active, off_input_placeholder;
 /* Scrollbar */
 static Py_ssize_t off_scrollbar_state, off_scrollbar_render_fn;
-/* ListView */
-static Py_ssize_t off_list_render_fn, off_list_cache;
 
 /* Read a slot as a borrowed PyObject* (no DECREF needed). */
 #define SLOT(obj, offset)  (*(PyObject **)((char *)(obj) + (offset)))
@@ -203,7 +198,6 @@ static int init_render_types(void) {
     LOAD(ScrollType_,    "ttyz.components.scroll",    "Scroll");
     LOAD(ScrollbarType_, "ttyz.components.scrollbar",  "Scrollbar");
     LOAD(TableType_,     "ttyz.components.table",     "Table");
-    LOAD(ListViewType_,  "ttyz.components.list",       "ListView");
     LOAD(InputType_,     "ttyz.components.input",     "Input");
 #undef LOAD
 
@@ -244,10 +238,8 @@ static int init_render_types(void) {
     INTERN(a_total,           "total");
     INTERN(a_wrap,            "wrap");
     INTERN(a_render_fn,       "render_fn");
-    INTERN(a_cursor,          "cursor");
     INTERN(a_items,           "items");
     INTERN(a_scroll,          "scroll");
-    INTERN(a_key,             "key");
     INTERN(a_cache,           "cache");
     INTERN(s_visible,         "visible");
     INTERN(s_start,           "start");
@@ -304,7 +296,10 @@ static int init_render_types(void) {
     OFF(off_box_title,      BoxType_,     "title");
     OFF(off_box_padding,    BoxType_,     "padding");
     /* Scroll */
-    OFF(off_scroll_state,   ScrollType_,  "state");
+    OFF(off_scroll_state,     ScrollType_,  "state");
+    OFF(off_scroll_items,     ScrollType_,  "items");
+    OFF(off_scroll_render_fn, ScrollType_,  "render_fn");
+    OFF(off_scroll_cache,     ScrollType_,  "cache");
     /* Spacer */
     OFF(off_spacer_min_length, SpacerType_, "min_length");
     /* Input */
@@ -314,9 +309,6 @@ static int init_render_types(void) {
     /* Scrollbar */
     OFF(off_scrollbar_state,     ScrollbarType_, "state");
     OFF(off_scrollbar_render_fn, ScrollbarType_, "render_fn");
-    /* ListView */
-    OFF(off_list_render_fn, ListViewType_, "render_fn");
-    OFF(off_list_cache,     ListViewType_, "cache");
 #undef OFF
 
     render_types_ready = 1;
@@ -1311,30 +1303,64 @@ static int render_scroll(RenderCtx *ctx, PyObject *node,
                          int x, int y, int w, int h, Style bg) {
     if (h <= 0) return 0;
 
-    PyObject *state = SLOT(node, off_scroll_state);     /* borrowed */
-    PyObject *children = SLOT(node, off_children);       /* borrowed */
-    Py_ssize_t total = PyTuple_GET_SIZE(children);
+    PyObject *state = SLOT(node, off_scroll_state);        /* borrowed */
+    PyObject *items = SLOT(node, off_scroll_items);        /* borrowed list */
+    PyObject *fn    = SLOT(node, off_scroll_render_fn);    /* borrowed */
+    PyObject *cache = SLOT(node, off_scroll_cache);        /* borrowed dict */
+    if (!state || !items || !fn) return -1;
+    if (cache && !PyDict_Check(cache)) cache = NULL;
 
-    /* Update state (ScrollState is a regular Python object — use SetAttr). */
+    Py_ssize_t nitems = PyList_Check(items) ? PyList_GET_SIZE(items) : 0;
+
     rc_set_int(state, a_height, h);
-    rc_set_int(state, a_total, (int)total);
+    rc_set_int(state, a_total, (int)nitems);
 
     int follow = rc_bool_attr(state, a_follow, 0);
     int max_off = rc_int_attr(state, a_max_offset, 0);
-
     int offset = follow ? max_off : rc_int_attr(state, a_offset, 0);
     if (offset < 0) offset = 0;
     if (offset > max_off) offset = max_off;
     rc_set_int(state, a_offset, offset);
 
-    if ((int)total > h && offset >= max_off)
+    if ((int)nitems > h && offset >= max_off)
         rc_set_bool(state, a_follow, 1);
 
     int rows = 0;
-    for (Py_ssize_t i = (Py_ssize_t)offset; i < total && rows < h; i++) {
+    for (Py_ssize_t i = (Py_ssize_t)offset; i < nitems && rows < h; i++) {
+        PyObject *item = PyList_GET_ITEM(items, i);
+        PyObject *child = NULL;
+        PyObject *ck = cache ? PyLong_FromVoidPtr(item) : NULL;
+
+        if (ck) {
+            PyObject *entry = PyDict_GetItem(cache, ck);  /* borrowed */
+            if (entry && PyTuple_Check(entry) &&
+                PyTuple_GET_SIZE(entry) >= 2 &&
+                (int)PyLong_AsLong(PyTuple_GET_ITEM(entry, 0)) == w) {
+                child = PyTuple_GET_ITEM(entry, 1);
+                Py_INCREF(child);
+            }
+            if (PyErr_Occurred()) PyErr_Clear();
+        }
+
+        if (!child) {
+            PyObject *idx = PyLong_FromSsize_t(i);
+            if (!idx) { Py_XDECREF(ck); return -1; }
+            child = PyObject_CallFunctionObjArgs(fn, item, idx, NULL);
+            Py_DECREF(idx);
+            if (child && ck) {
+                PyObject *entry = Py_BuildValue("(iO)", w, child);
+                if (entry) {
+                    PyDict_SetItem(cache, ck, entry);
+                    Py_DECREF(entry);
+                }
+            }
+        }
+        Py_XDECREF(ck);
+        if (!child) return -1;
+
         int remaining = h - rows;
-        int cr = c_render_node(ctx, PyTuple_GET_ITEM(children, i),
-                               x, y + rows, w, remaining, bg);
+        int cr = c_render_node(ctx, child, x, y + rows, w, remaining, bg);
+        Py_DECREF(child);
         if (cr < 0) return -1;
         if (cr > remaining) cr = remaining;
         rows += cr;
@@ -1620,126 +1646,6 @@ static int render_scrollbar(RenderCtx *ctx, PyObject *node,
     return rows;
 }
 
-/* ── ListView ────────────────────────────────────────────────────── */
-
-static int render_listview(RenderCtx *ctx, PyObject *node,
-                           int x, int y, int w, int h, Style bg) {
-    if (h <= 0) return 0;
-
-    PyObject *state = PyObject_GetAttr(node, a_state);
-    if (!state) return -1;
-
-    /* state.cursor = state.clamp(state.cursor) */
-    int cur = rc_int_attr(state, a_cursor, 0);
-    PyObject *clamped = PyObject_CallMethod(state, "clamp", "i", cur);
-    if (clamped) {
-        PyObject_SetAttr(state, a_cursor, clamped);
-        cur = (int)PyLong_AsLong(clamped);
-        Py_DECREF(clamped);
-    } else {
-        PyErr_Clear();
-    }
-
-    /* state.scroll.scroll_to_visible(state.cursor) */
-    PyObject *scroll = PyObject_GetAttr(state, a_scroll);
-    if (!scroll) { Py_DECREF(state); return -1; }
-    PyObject *stv = PyObject_CallMethod(scroll, "scroll_to_visible",
-                                        "i", cur);
-    Py_XDECREF(stv);
-    if (PyErr_Occurred()) PyErr_Clear();
-
-    /* state.scroll.height = h */
-    rc_set_int(scroll, a_height, h);
-
-    /* state.scroll.total = state.total */
-    int total = rc_int_attr(state, a_total, 0);
-    rc_set_int(scroll, a_total, total);
-
-    /* Clamp offset. */
-    int max_off = rc_int_attr(scroll, a_max_offset, 0);
-    int offset = rc_int_attr(scroll, a_offset, 0);
-    if (offset < 0) offset = 0;
-    if (offset > max_off) offset = max_off;
-    rc_set_int(scroll, a_offset, offset);
-
-    PyObject *items = PyObject_GetAttr(state, a_items);
-    if (!items) { Py_DECREF(scroll); Py_DECREF(state); return -1; }
-    PyObject *fn = SLOT(node, off_list_render_fn);       /* borrowed */
-    PyObject *cache = SLOT(node, off_list_cache);         /* borrowed */
-    if (!cache || !PyDict_Check(cache)) cache = NULL;
-
-    Py_ssize_t nitems = PyList_GET_SIZE(items);
-    int rows = 0;
-    for (Py_ssize_t i = (Py_ssize_t)offset; i < nitems && rows < h; i++) {
-        PyObject *item = PyList_GET_ITEM(items, i);
-        int sel = ((int)i == cur) ? 1 : 0;
-        PyObject *child = NULL;
-
-        /* Try item cache: cache[item.key] = (id, sel, w, node). */
-        PyObject *item_key = NULL;
-        if (cache) {
-            item_key = PyObject_GetAttr(item, a_key);
-            if (item_key) {
-                PyObject *entry = PyDict_GetItem(cache, item_key);
-                if (entry && PyTuple_Check(entry) &&
-                    PyTuple_GET_SIZE(entry) >= 4) {
-                    Py_ssize_t cid = PyLong_AsSsize_t(
-                        PyTuple_GET_ITEM(entry, 0));
-                    int csel = PyTuple_GET_ITEM(entry, 1) == Py_True;
-                    int cw = (int)PyLong_AsLong(
-                        PyTuple_GET_ITEM(entry, 2));
-                    if (!PyErr_Occurred() &&
-                        cid == (Py_ssize_t)item &&
-                        csel == sel && cw == w) {
-                        child = PyTuple_GET_ITEM(entry, 3);
-                        Py_INCREF(child);
-                    }
-                }
-            } else {
-                PyErr_Clear();
-            }
-        }
-
-        if (!child) {
-            child = PyObject_CallFunction(fn, "OO", item,
-                                          sel ? Py_True : Py_False);
-            /* Store in cache. */
-            if (child && item_key) {
-                PyObject *e = Py_BuildValue("(nOiO)",
-                    (Py_ssize_t)item,
-                    sel ? Py_True : Py_False, w, child);
-                if (e) {
-                    PyDict_SetItem(cache, item_key, e);
-                    Py_DECREF(e);
-                }
-            }
-        }
-        Py_XDECREF(item_key);
-
-        if (!child) {
-            Py_DECREF(items);
-            Py_DECREF(scroll); Py_DECREF(state);
-            return -1;
-        }
-        int remaining = h - rows;
-        int cr = c_render_node(ctx, child, x, y + rows, w,
-                               remaining, bg);
-        Py_DECREF(child);
-        if (cr < 0) {
-            Py_DECREF(items);
-            Py_DECREF(scroll); Py_DECREF(state);
-            return -1;
-        }
-        if (cr > remaining) cr = remaining;
-        rows += cr;
-    }
-
-    Py_DECREF(items);
-    Py_DECREF(scroll);
-    Py_DECREF(state);
-    return h;
-}
-
 /* ── Custom ──────────────────────────────────────────────────────── */
 
 static int render_custom(RenderCtx *ctx, PyObject *node,
@@ -1781,7 +1687,6 @@ static int dispatch_render(RenderCtx *ctx, PyTypeObject *tp,
     if (tp == SpacerType_)     return render_spacer(ctx, node, x, y, w, h, bg);
     if (tp == InputType_)      return render_input(ctx, node, x, y, w, h, bg);
     if (tp == ScrollbarType_)  return render_scrollbar(ctx, node, x, y, w, h, bg);
-    if (tp == ListViewType_)   return render_listview(ctx, node, x, y, w, h, bg);
     return render_custom(ctx, node, x, y, w, h, bg);
 }
 

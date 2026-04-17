@@ -13,14 +13,17 @@ from ttyz import (
     Buffer,
     ListState,
     Node,
+    ScrollState,
     hstack,
     render_to_buffer,
+    scroll,
     text,
     vstack,
 )
 from ttyz import (
     list as tlist,
 )
+from ttyz.components.text import Text
 
 
 @dataclass
@@ -250,3 +253,24 @@ def test_pipeline_warm():
 
     elapsed = _timed(run)
     assert elapsed < 0.015, f"warm pipeline 100 took {elapsed:.3f}s"
+
+
+# ── Virtualization ───────────────────────────────────────────────────
+
+
+def _row_int(x: int, i: int) -> Text:
+    return text(str(x))
+
+
+def test_scroll_scales_to_one_million_items():
+    """Regression canary: scroll stays O(viewport), not O(items)."""
+    s = ScrollState()
+    s.offset = 500_000
+    items = list(range(1_000_000))
+
+    def run():
+        buf = Buffer(40, 30)
+        render_to_buffer(scroll(items, _row_int, state=s), buf)
+
+    elapsed = _timed(run, iterations=100)
+    assert elapsed < 0.1, f"1M-item scroll x100 took {elapsed:.3f}s"

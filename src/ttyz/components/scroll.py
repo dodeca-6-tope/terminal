@@ -1,6 +1,13 @@
-"""Scrollable viewport — data class, ScrollState, and factory."""
+"""Scrollable viewport — ScrollState and factory.
+
+``scroll`` is always lazy: items are data, only visible ones render.
+The ``scroll(*children)`` form is sugar for pre-built nodes.
+"""
 
 from __future__ import annotations
+
+from collections.abc import Callable, Sequence
+from typing import Any, cast
 
 from ttyz.components.base import Node
 
@@ -43,18 +50,22 @@ class ScrollState:
 
     @property
     def max_offset(self) -> int:
-        return max(0, self.total - self.height)
+        diff = self.total - self.height
+        return diff if diff > 0 else 0
 
 
 class Scroll(Node):
     """Scrollable viewport node."""
 
-    __slots__ = ("state",)
-    state: ScrollState
+    __slots__ = ("state", "items", "render_fn", "cache")
+
+
+def _identity(node: Node, _: int) -> Node:
+    return node
 
 
 def scroll(
-    *children: Node,
+    *args: Any,
     state: ScrollState,
     width: str | None = None,
     height: str | None = None,
@@ -62,9 +73,26 @@ def scroll(
     bg: int | None = None,
     overflow: str = "visible",
 ) -> Scroll:
-    node = Scroll(
-        children, grow if grow is not None else 1, width, height, bg, overflow
-    )
-    node.state = state
+    """Scrollable viewport.
 
+    Two call shapes:
+        scroll(items, render_fn, *, state=...)   # data + render
+        scroll(*children, *, state=...)          # pre-built nodes
+    """
+    lazy = len(args) == 2 and callable(args[1]) and not isinstance(args[0], Node)
+    if lazy:
+        raw = cast(Sequence[Any], args[0])
+        items = raw if isinstance(raw, list) else list(raw)
+        render_fn = cast(Callable[[Any, int], Node], args[1])
+        eager: tuple[Node, ...] = ()
+    else:
+        items = list(args)
+        render_fn = _identity
+        eager = cast("tuple[Node, ...]", args)
+
+    node = Scroll(eager, grow if grow is not None else 1, width, height, bg, overflow)
+    node.state = state
+    node.items = items
+    node.render_fn = render_fn
+    node.cache = {}
     return node

@@ -1,4 +1,4 @@
-"""List — data class, ListState, and factory."""
+"""List — scrollable list with a cursor, built on ``scroll``."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Generic, TypeVar
 
 from ttyz.components.base import Node
 from ttyz.components.keyed import Keyed
-from ttyz.components.scroll import ScrollState
+from ttyz.components.scroll import Scroll, ScrollState, scroll
 
 T = TypeVar("T", bound=Keyed)
 
@@ -59,12 +59,6 @@ class ListState(Generic[T]):
         return len(self.items)
 
 
-class ListView(Node):
-    """List node — scrollable list with cursor selection and item cache."""
-
-    __slots__ = ("state", "render_fn", "cache")
-
-
 def list(
     state: ListState[T],
     render_fn: Callable[[T, bool], Node],
@@ -73,10 +67,21 @@ def list(
     grow: int | None = None,
     bg: int | None = None,
     overflow: str = "visible",
-) -> ListView:
-    node = ListView((), grow if grow is not None else 1, width, height, bg, overflow)
-    node.state = state
-    node.render_fn = render_fn
-    node.cache = {}
+) -> Scroll:
+    state.cursor = state.clamp(state.cursor)
+    state.scroll.scroll_to_visible(state.cursor)
+    cursor = state.cursor
 
-    return node
+    def row(item: T, i: int) -> Node:
+        return render_fn(item, i == cursor)
+
+    return scroll(
+        state.items,
+        row,
+        state=state.scroll,
+        width=width,
+        height=height,
+        grow=grow,
+        bg=bg,
+        overflow=overflow,
+    )
