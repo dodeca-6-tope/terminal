@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from typing import overload
+
 from ttyz.components.base import Node, Overflow
 
 
@@ -54,6 +57,19 @@ class Scroll(Node):
     state: ScrollState
 
 
+@overload
+def scroll(
+    children: Sequence[Node],
+    /,
+    *,
+    state: ScrollState,
+    width: str | None = None,
+    height: str | None = None,
+    grow: int | None = None,
+    bg: int | None = None,
+    overflow: Overflow = "visible",
+) -> Scroll: ...
+@overload
 def scroll(
     *children: Node,
     state: ScrollState,
@@ -62,9 +78,22 @@ def scroll(
     grow: int | None = None,
     bg: int | None = None,
     overflow: Overflow = "visible",
+) -> Scroll: ...
+def scroll(
+    *children: Node | Sequence[Node],
+    state: ScrollState,
+    width: str | None = None,
+    height: str | None = None,
+    grow: int | None = None,
+    bg: int | None = None,
+    overflow: Overflow = "visible",
 ) -> Scroll:
-    node = Scroll(
-        children, grow if grow is not None else 1, width, height, bg, overflow
-    )
+    # Single non-Node positional → treat as the Sequence backing (lazy-friendly).
+    # Otherwise varargs of Nodes → bundle into a tuple.
+    if len(children) == 1 and not isinstance(children[0], Node):
+        backing: Sequence[Node] = children[0]
+    else:
+        backing = children  # type: ignore[assignment]
+    node = Scroll(backing, grow if grow is not None else 1, width, height, bg, overflow)
     node.state = state
     return node

@@ -7,7 +7,7 @@ no render/measure logic — all rendering lives in ``render.py``.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Literal, TypeAlias
 
 RenderFn: TypeAlias = Callable[..., list[str]]
@@ -20,7 +20,7 @@ class Node:
     """Base data node in the component tree."""
 
     __slots__ = ("children", "grow", "width", "height", "bg", "overflow")
-    children: tuple[Node, ...]
+    children: Sequence[Node]
     grow: int
     width: str | None
     height: str | None
@@ -29,7 +29,7 @@ class Node:
 
     def __init__(
         self,
-        children: tuple[Node, ...] = (),
+        children: Sequence[Node] = (),
         grow: int = 0,
         width: str | None = None,
         height: str | None = None,

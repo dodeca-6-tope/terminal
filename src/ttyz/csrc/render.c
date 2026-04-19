@@ -312,10 +312,58 @@ static int init_render_types(void) {
 struct RenderCtx {
     BufferObject *buf;
     PyObject     *mcache;   /* dict[node, int] for measure */
+    PyObject     *ccache;   /* dict[(children, index)] -> Node for lazy child cache */
     int           depth;
 };
 
 /* ── Helpers ──────────────────────────────────────────────────────── */
+
+/* Children accessors.
+ *
+ * `children` is the object held in a node's `children` slot — a tuple for
+ * static nodes, or any Sequence-shaped object for lazy backings.
+ *
+ * children_item always returns a NEW reference.  Callers must Py_DECREF
+ * when done — this unifies ownership across the tuple and Sequence paths.
+ *
+ * For non-tuple (Sequence) backings the result is cached in ctx->ccache
+ * for the duration of the render so a node is produced at most once per
+ * index per render pass — keeps measure/render two-pass layouts and the
+ * node-identity measure cache consistent when render_fn is lazy.
+ *
+ * children_len returns -1 with a Python exception set on error. */
+static inline Py_ssize_t children_len(PyObject *children) {
+    if (PyTuple_CheckExact(children))
+        return PyTuple_GET_SIZE(children);
+    return PySequence_Size(children);
+}
+
+static PyObject *children_item(RenderCtx *ctx, PyObject *children,
+                               Py_ssize_t i) {
+    if (PyTuple_CheckExact(children)) {
+        PyObject *item = PyTuple_GET_ITEM(children, i);
+        Py_INCREF(item);
+        return item;
+    }
+    /* Key by (id(children), i) — the children object is alive for the
+     * whole render so the pointer is stable, and this lets unhashable
+     * sequence types (lists, user-defined) work. */
+    PyObject *key = Py_BuildValue("(Nn)", PyLong_FromVoidPtr(children), i);
+    if (!key) return NULL;
+    PyObject *cached = PyDict_GetItem(ctx->ccache, key);  /* borrowed */
+    if (cached) {
+        Py_INCREF(cached);
+        Py_DECREF(key);
+        return cached;
+    }
+    PyObject *fresh = PySequence_GetItem(children, i);
+    if (!fresh) { Py_DECREF(key); return NULL; }
+    if (PyDict_SetItem(ctx->ccache, key, fresh) < 0) {
+        Py_DECREF(key); Py_DECREF(fresh); return NULL;
+    }
+    Py_DECREF(key);
+    return fresh;
+}
 
 static inline void rc_set_cell(BufferObject *buf, int col, int row,
                                Py_UCS4 ch, Style style) {
@@ -612,23 +660,31 @@ static int c_measure_node(RenderCtx *ctx, PyObject *node) {
     else if (tp == HStackType_) {
         PyObject *children = SLOT(node, off_children);
         int sp = slot_int(node, off_hstack_spacing);
-        Py_ssize_t n = PyTuple_GET_SIZE(children);
+        Py_ssize_t n = children_len(children);
+        if (n < 0) return -1;
         int count = 0;
         for (Py_ssize_t i = 0; i < n; i++) {
-            PyObject *c = PyTuple_GET_ITEM(children, i);
+            PyObject *c = children_item(ctx, children, i);
+            if (!c) return -1;
             int cw = c_measure_node(ctx, c);
-            if (cw < 0) return -1;
+            if (cw < 0) { Py_DECREF(c); return -1; }
             int g = slot_int(c, off_grow);
             int has_w = (SLOT(c, off_width) != Py_None);
             if (cw > 0 || g || has_w) { result += cw; count++; }
+            Py_DECREF(c);
         }
         if (count > 1) result += sp * (count - 1);
     }
     else if (tp == BoxType_) {
         PyObject *children = SLOT(node, off_children);
         int pad = slot_int(node, off_box_padding);
-        if (PyTuple_GET_SIZE(children) > 0) {
-            int cw = c_measure_node(ctx, PyTuple_GET_ITEM(children, 0));
+        Py_ssize_t cn = children_len(children);
+        if (cn < 0) return -1;
+        if (cn > 0) {
+            PyObject *first = children_item(ctx, children, 0);
+            if (!first) return -1;
+            int cw = c_measure_node(ctx, first);
+            Py_DECREF(first);
             if (cw < 0) return -1;
             int content_w = cw + pad * 2;
             int title_w = 0;
@@ -672,16 +728,26 @@ static int c_measure_node(RenderCtx *ctx, PyObject *node) {
     }
     else if (tp == CondType_) {
         PyObject *children = SLOT(node, off_children);
-        if (PyTuple_GET_SIZE(children) > 0)
-            result = c_measure_node(ctx, PyTuple_GET_ITEM(children, 0));
+        Py_ssize_t cn = children_len(children);
+        if (cn < 0) return -1;
+        if (cn > 0) {
+            PyObject *first = children_item(ctx, children, 0);
+            if (!first) return -1;
+            result = c_measure_node(ctx, first);
+            Py_DECREF(first);
+            if (result < 0) return -1;
+        }
     }
     else {
         /* VStack, ZStack, Scroll, Foreach, others: max of children. */
         PyObject *children = SLOT(node, off_children);
-        Py_ssize_t n = PyTuple_GET_SIZE(children);
+        Py_ssize_t n = children_len(children);
+        if (n < 0) return -1;
         for (Py_ssize_t i = 0; i < n; i++) {
-            int cw = c_measure_node(ctx,
-                                    PyTuple_GET_ITEM(children, i));
+            PyObject *c = children_item(ctx, children, i);
+            if (!c) return -1;
+            int cw = c_measure_node(ctx, c);
+            Py_DECREF(c);
             if (cw < 0) return -1;
             if (cw > result) result = cw;
         }
@@ -847,7 +913,8 @@ error:
 static int render_vstack(RenderCtx *ctx, PyObject *node,
                          int x, int y, int w, int h, Style bg) {
     PyObject *children = SLOT(node, off_children); /* borrowed */
-    Py_ssize_t n = PyTuple_GET_SIZE(children);
+    Py_ssize_t n = children_len(children);
+    if (n < 0) return -1;
     if (n == 0) return 0;
 
     int spacing = slot_int(node, off_vstack_spacing);
@@ -865,8 +932,10 @@ static int render_vstack(RenderCtx *ctx, PyObject *node,
                 if (h >= 0 && remaining <= spacing) break;
                 rows += spacing;
             }
-            PyObject *child = PyTuple_GET_ITEM(children, i);
+            PyObject *child = children_item(ctx, children, i);
+            if (!child) return -1;
             int cr = c_render_node(ctx, child, x, y + rows, w, -1, bg);
+            Py_DECREF(child);
             if (cr < 0) return -1;
             rows += cr;
         }
@@ -882,7 +951,8 @@ static int render_vstack(RenderCtx *ctx, PyObject *node,
     int ng = 0;
 
     for (Py_ssize_t i = 0; i < n; i++) {
-        PyObject *child = PyTuple_GET_ITEM(children, i);
+        PyObject *child = children_item(ctx, children, i);
+        if (!child) { free(child_h); return -1; }
         int g = slot_int(child, off_grow);
         int has_h = (SLOT(child, off_height) != Py_None);
 
@@ -891,6 +961,7 @@ static int render_vstack(RenderCtx *ctx, PyObject *node,
             if (ng >= 256) {
                 PyErr_SetString(PyExc_OverflowError,
                                 "VStack: too many grow children (max 256)");
+                Py_DECREF(child);
                 free(child_h); return -1;
             }
             grow_idx[ng] = (int)i; grow_wt[ng] = g; ng++;
@@ -898,10 +969,11 @@ static int render_vstack(RenderCtx *ctx, PyObject *node,
             int offscreen = ctx->buf->height;
             int ch = has_h ? h : -1;
             int cr = c_render_node(ctx, child, x, offscreen, w, ch, bg);
-            if (cr < 0) { free(child_h); return -1; }
+            if (cr < 0) { Py_DECREF(child); free(child_h); return -1; }
             child_h[i] = cr;
             used += cr;
         }
+        Py_DECREF(child);
     }
 
     int remaining = h - used;
@@ -913,18 +985,21 @@ static int render_vstack(RenderCtx *ctx, PyObject *node,
     int row = 0;
     for (Py_ssize_t i = 0; i < n; i++) {
         if (i > 0 && spacing) row += spacing;
-        PyObject *child = PyTuple_GET_ITEM(children, i);
+        PyObject *child = children_item(ctx, children, i);
+        if (!child) { free(child_h); return -1; }
         int g = slot_int(child, off_grow);
         int has_h = (SLOT(child, off_height) != Py_None);
 
         if (g && !has_h) {
             int cr = c_render_node(ctx, child, x, y + row, w,
                                    child_h[i], bg);
+            Py_DECREF(child);
             if (cr < 0) { free(child_h); return -1; }
             row += child_h[i];
         } else {
             int cr = c_render_node(ctx, child, x, y + row, w,
                                    has_h ? h : -1, bg);
+            Py_DECREF(child);
             if (cr < 0) { free(child_h); return -1; }
             row += child_h[i] >= 0 ? child_h[i] : cr;
         }
@@ -939,14 +1014,17 @@ static int render_vstack(RenderCtx *ctx, PyObject *node,
 static int render_foreach(RenderCtx *ctx, PyObject *node,
                           int x, int y, int w, int h, Style bg) {
     PyObject *children = SLOT(node, off_children);
-    Py_ssize_t n = PyTuple_GET_SIZE(children);
+    Py_ssize_t n = children_len(children);
+    if (n < 0) return -1;
 
     int rows = 0;
     for (Py_ssize_t i = 0; i < n; i++) {
         if (h >= 0 && rows >= h) break;
         int remaining = (h >= 0) ? h - rows : -1;
-        int cr = c_render_node(ctx, PyTuple_GET_ITEM(children, i),
-                               x, y + rows, w, remaining, bg);
+        PyObject *child = children_item(ctx, children, i);
+        if (!child) return -1;
+        int cr = c_render_node(ctx, child, x, y + rows, w, remaining, bg);
+        Py_DECREF(child);
         if (cr < 0) return -1;
         rows += cr;
     }
@@ -959,10 +1037,14 @@ static int render_foreach(RenderCtx *ctx, PyObject *node,
 static int render_cond(RenderCtx *ctx, PyObject *node,
                        int x, int y, int w, int h, Style bg) {
     PyObject *children = SLOT(node, off_children);
-    if (PyTuple_GET_SIZE(children) == 0)
-        return 0;
-    return c_render_node(ctx, PyTuple_GET_ITEM(children, 0),
-                         x, y, w, h, bg);
+    Py_ssize_t cn = children_len(children);
+    if (cn < 0) return -1;
+    if (cn == 0) return 0;
+    PyObject *first = children_item(ctx, children, 0);
+    if (!first) return -1;
+    int cr = c_render_node(ctx, first, x, y, w, h, bg);
+    Py_DECREF(first);
+    return cr;
 }
 
 /* ── Spacer ───────────────────────────────────────────────────────── */
@@ -1030,20 +1112,22 @@ static int render_hstack_wrap(RenderCtx *ctx, PyObject *children,
     int col = 0;  /* x position after last content (excl. spacing) */
     for (Py_ssize_t i = 0; i < nc; i++) {
         if (h >= 0 && row_off >= h) break;
-        PyObject *c = PyTuple_GET_ITEM(children, i);
+        PyObject *c = children_item(ctx, children, i);
+        if (!c) return -1;
         int cw = c_measure_node(ctx, c);
-        if (cw < 0) return -1;
-        if (cw == 0) continue;
+        if (cw < 0) { Py_DECREF(c); return -1; }
+        if (cw == 0) { Py_DECREF(c); continue; }
 
         int needed = col > 0 ? col + spacing + cw : cw;
         if (needed > w && col > 0) {
             row_off++;
             col = 0;
         }
-        if (h >= 0 && row_off >= h) break;
+        if (h >= 0 && row_off >= h) { Py_DECREF(c); break; }
         int cx = col > 0 ? col + spacing : 0;
         c_render_node(ctx, c, x + cx, y + row_off, cw, 1, bg);
         col = cx + cw;
+        Py_DECREF(c);
     }
     return row_off + 1;
 }
@@ -1051,7 +1135,8 @@ static int render_hstack_wrap(RenderCtx *ctx, PyObject *children,
 static int render_hstack(RenderCtx *ctx, PyObject *node,
                          int x, int y, int w, int h, Style bg) {
     PyObject *children = SLOT(node, off_children); /* borrowed */
-    Py_ssize_t nc = PyTuple_GET_SIZE(children);
+    Py_ssize_t nc = children_len(children);
+    if (nc < 0) return -1;
 
     int spacing = slot_int(node, off_hstack_spacing);
 
@@ -1064,32 +1149,40 @@ static int render_hstack(RenderCtx *ctx, PyObject *node,
     PyObject *jc = SLOT(node, off_hstack_jc);
     PyObject *ai = SLOT(node, off_hstack_ai);
 
-    /* Collect active children (measure > 0 or grow or width). */
+    /* Collect active children — act_arr holds owned refs released in cleanup. */
     PyObject *act_arr[512];
     int n = 0;
+    int result = -1;
+
     for (Py_ssize_t i = 0; i < nc; i++) {
-        PyObject *c = PyTuple_GET_ITEM(children, i);
+        PyObject *c = children_item(ctx, children, i);
+        if (!c) goto cleanup;
         int m = c_measure_node(ctx, c);
-        if (m < 0) return -1;
+        if (m < 0) { Py_DECREF(c); goto cleanup; }
         int g = slot_int(c, off_grow);
         int has_w = (SLOT(c, off_width) != Py_None);
         if (m > 0 || g || has_w) {
             if (n >= 512) {
                 PyErr_SetString(PyExc_OverflowError,
                                 "HStack: too many active children (max 512)");
-                return -1;
+                Py_DECREF(c);
+                goto cleanup;
             }
-            act_arr[n++] = c;
+            act_arr[n++] = c;  /* ownership transferred */
+        } else {
+            Py_DECREF(c);
         }
     }
 
-    if (n == 0)
-        return (h >= 0) ? h : 1;
+    if (n == 0) {
+        result = (h >= 0) ? h : 1;
+        goto cleanup;
+    }
 
     /* Flex distribution. */
     int col_widths[512];
     int remaining = flex_dist(ctx, act_arr, n, col_widths, w, spacing);
-    if (remaining < 0) return -1;
+    if (remaining < 0) goto cleanup;
 
     /* Compute x offsets based on justify_content. */
     int offsets[512];
@@ -1138,7 +1231,7 @@ static int render_hstack(RenderCtx *ctx, PyObject *node,
             int cr = c_render_node(ctx, act_arr[i],
                                    x + offsets[i], offscreen,
                                    col_widths[i], ch, bg);
-            if (cr < 0) return -1;
+            if (cr < 0) goto cleanup;
             col_heights[i] = cr;
             if (cr > max_rows) max_rows = cr;
         }
@@ -1166,7 +1259,7 @@ static int render_hstack(RenderCtx *ctx, PyObject *node,
         int cr = c_render_node(ctx, act_arr[i],
                                x + offsets[i], y + y_offsets[i],
                                col_widths[i], ch, bg);
-        if (cr < 0) return -1;
+        if (cr < 0) goto cleanup;
         if (ai == s_start && cr > max_rows) max_rows = cr;
     }
 
@@ -1176,7 +1269,10 @@ static int render_hstack(RenderCtx *ctx, PyObject *node,
                               col_widths[i], max_rows, bg);
     }
 
-    return max_rows;
+    result = max_rows;
+cleanup:
+    for (int i = 0; i < n; i++) Py_DECREF(act_arr[i]);
+    return result;
 }
 
 /* ── Box ──────────────────────────────────────────────────────────── */
@@ -1202,8 +1298,11 @@ static const Py_UCS4 *lookup_border(PyObject *style) {
 static int render_box(RenderCtx *ctx, PyObject *node,
                       int x, int y, int w, int h, Style bg) {
     PyObject *children = SLOT(node, off_children);
-    if (PyTuple_GET_SIZE(children) == 0) return 0;
-    PyObject *child = PyTuple_GET_ITEM(children, 0);
+    Py_ssize_t cn = children_len(children);
+    if (cn < 0) return -1;
+    if (cn == 0) return 0;
+    PyObject *child = children_item(ctx, children, 0);
+    if (!child) return -1;
 
     PyObject *style_obj = SLOT(node, off_box_style);   /* borrowed */
     PyObject *title_obj = SLOT(node, off_box_title);    /* borrowed */
@@ -1215,7 +1314,7 @@ static int render_box(RenderCtx *ctx, PyObject *node,
 
     /* Compute inner width. */
     int child_w = c_measure_node(ctx, child);
-    if (child_w < 0) return -1;
+    if (child_w < 0) { Py_DECREF(child); return -1; }
     int child_grow = slot_int(child, off_grow);
     int content_w = child_w + pad * 2;
     int title_w = 0;
@@ -1263,10 +1362,11 @@ static int render_box(RenderCtx *ctx, PyObject *node,
     /* Measure child height, fill interior for opacity, render on top. */
     int cr = c_render_node(ctx, child, x + 1 + pad,
                            ctx->buf->height, cw, child_h, bg);
-    if (cr < 0) return -1;
+    if (cr < 0) { Py_DECREF(child); return -1; }
     int content_rows = cr > 0 ? cr : 1;
     rc_fill_region(buf, x + 1, y + 1, inner, content_rows, bg);
     c_render_node(ctx, child, x + 1 + pad, y + 1, cw, child_h, bg);
+    Py_DECREF(child);
 
     for (int r = 0; r < content_rows; r++) {
         int row = y + 1 + r;
@@ -1295,7 +1395,8 @@ static int render_scroll(RenderCtx *ctx, PyObject *node,
 
     PyObject *state = SLOT(node, off_scroll_state);     /* borrowed */
     PyObject *children = SLOT(node, off_children);      /* borrowed */
-    Py_ssize_t total = PyTuple_GET_SIZE(children);
+    Py_ssize_t total = children_len(children);
+    if (total < 0) return -1;
 
     rc_set_int(state, a_height, h);
     rc_set_int(state, a_total, (int)total);
@@ -1313,8 +1414,10 @@ static int render_scroll(RenderCtx *ctx, PyObject *node,
     int rows = 0;
     for (Py_ssize_t i = (Py_ssize_t)offset; i < total && rows < h; i++) {
         int remaining = h - rows;
-        int cr = c_render_node(ctx, PyTuple_GET_ITEM(children, i),
-                               x, y + rows, w, remaining, bg);
+        PyObject *child = children_item(ctx, children, i);
+        if (!child) return -1;
+        int cr = c_render_node(ctx, child, x, y + rows, w, remaining, bg);
+        Py_DECREF(child);
         if (cr < 0) return -1;
         if (cr > remaining) cr = remaining;
         rows += cr;
@@ -1406,7 +1509,8 @@ static int render_table(RenderCtx *ctx, PyObject *node,
 static int render_zstack(RenderCtx *ctx, PyObject *node,
                          int x, int y, int w, int h, Style bg) {
     PyObject *children = SLOT(node, off_children); /* borrowed */
-    Py_ssize_t n = PyTuple_GET_SIZE(children);
+    Py_ssize_t n = children_len(children);
+    if (n < 0) return -1;
     if (n == 0) return (h >= 0) ? h : 1;
 
     PyObject *jc = SLOT(node, off_zstack_jc); /* borrowed */
@@ -1417,43 +1521,49 @@ static int render_zstack(RenderCtx *ctx, PyObject *node,
     int canvas_h = h;
     Py_ssize_t first_done = 0;
     if (canvas_h < 0) {
-        PyObject *first = PyTuple_GET_ITEM(children, 0);
+        PyObject *first = children_item(ctx, children, 0);
+        if (!first) return -1;
         if (is_start) {
             canvas_h = c_render_node(ctx, first, x, y, w, -1, bg);
+            Py_DECREF(first);
             if (canvas_h < 0) return -1;
             first_done = 1;
         } else {
             canvas_h = c_render_node(ctx, first, x, ctx->buf->height,
                                      w, -1, bg);
+            Py_DECREF(first);
             if (canvas_h < 0) return -1;
         }
     }
 
     for (Py_ssize_t i = first_done; i < n; i++) {
-        PyObject *child = PyTuple_GET_ITEM(children, i);
+        PyObject *child = children_item(ctx, children, i);
+        if (!child) return -1;
 
         if (is_start) {
-            if (c_render_node(ctx, child, x, y, w, canvas_h, bg) < 0)
-                return -1;
+            int cr = c_render_node(ctx, child, x, y, w, canvas_h, bg);
+            Py_DECREF(child);
+            if (cr < 0) return -1;
             continue;
         }
 
         int g = slot_int(child, off_grow);
         if (g && canvas_h >= 0) {
             c_render_node(ctx, child, x, y, w, canvas_h, bg);
+            Py_DECREF(child);
             continue;
         }
 
         int layer_h = c_render_node(ctx, child, x, ctx->buf->height,
                                     w, canvas_h, bg);
-        if (layer_h < 0) return -1;
+        if (layer_h < 0) { Py_DECREF(child); return -1; }
 
         int layer_w;
         if (SLOT(child, off_width) == Py_None && Py_TYPE(child) == ZStackType_) {
             layer_w = w;
         } else {
             layer_w = c_measure_node(ctx, child);
-            if (layer_w < 0) return -1;
+            if (layer_w < 0) { Py_DECREF(child); return -1; }
         }
 
         int row_off = 0, col_off = 0;
@@ -1466,6 +1576,7 @@ static int render_zstack(RenderCtx *ctx, PyObject *node,
 
         c_render_node(ctx, child, x + col_off, y + row_off,
                       w, canvas_h, bg);
+        Py_DECREF(child);
     }
 
     rc_fill_unwritten(ctx->buf, x, y, w, canvas_h, bg);
@@ -1754,13 +1865,16 @@ static PyObject *mod_render_to_buffer(PyObject *self, PyObject *args) {
 
     PyObject *mcache = PyDict_New();
     if (!mcache) return NULL;
+    PyObject *ccache = PyDict_New();
+    if (!ccache) { Py_DECREF(mcache); return NULL; }
 
-    RenderCtx ctx = {buf, mcache, 0};
+    RenderCtx ctx = {buf, mcache, ccache, 0};
     int rows = c_render_node(&ctx, node, 0, 0,
                              buf->width, render_h,
                              STYLE_EMPTY);
 
     Py_DECREF(mcache);
+    Py_DECREF(ccache);
 
     if (rows < 0) return NULL;
     return PyLong_FromLong(rows);
