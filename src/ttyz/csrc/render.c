@@ -69,9 +69,6 @@ static PyObject *a_placeholder;
 static PyObject *a_total;
 static PyObject *a_wrap;
 static PyObject *a_render_fn;
-static PyObject *a_items;
-static PyObject *a_scroll;
-static PyObject *a_cache;
 
 /* Interned constant strings. */
 static PyObject *s_visible;
@@ -110,8 +107,7 @@ static Py_ssize_t off_zstack_jc, off_zstack_ai;
 /* Box */
 static Py_ssize_t off_box_style, off_box_title, off_box_padding;
 /* Scroll */
-static Py_ssize_t off_scroll_state, off_scroll_items,
-                  off_scroll_render_fn, off_scroll_cache;
+static Py_ssize_t off_scroll_state;
 /* Spacer */
 static Py_ssize_t off_spacer_min_length;
 /* Input */
@@ -238,9 +234,6 @@ static int init_render_types(void) {
     INTERN(a_total,           "total");
     INTERN(a_wrap,            "wrap");
     INTERN(a_render_fn,       "render_fn");
-    INTERN(a_items,           "items");
-    INTERN(a_scroll,          "scroll");
-    INTERN(a_cache,           "cache");
     INTERN(s_visible,         "visible");
     INTERN(s_start,           "start");
     INTERN(s_end,             "end");
@@ -297,9 +290,6 @@ static int init_render_types(void) {
     OFF(off_box_padding,    BoxType_,     "padding");
     /* Scroll */
     OFF(off_scroll_state,     ScrollType_,  "state");
-    OFF(off_scroll_items,     ScrollType_,  "items");
-    OFF(off_scroll_render_fn, ScrollType_,  "render_fn");
-    OFF(off_scroll_cache,     ScrollType_,  "cache");
     /* Spacer */
     OFF(off_spacer_min_length, SpacerType_, "min_length");
     /* Input */
@@ -1303,17 +1293,12 @@ static int render_scroll(RenderCtx *ctx, PyObject *node,
                          int x, int y, int w, int h, Style bg) {
     if (h <= 0) return 0;
 
-    PyObject *state = SLOT(node, off_scroll_state);        /* borrowed */
-    PyObject *items = SLOT(node, off_scroll_items);        /* borrowed list */
-    PyObject *fn    = SLOT(node, off_scroll_render_fn);    /* borrowed */
-    PyObject *cache = SLOT(node, off_scroll_cache);        /* borrowed dict */
-    if (!state || !items || !fn) return -1;
-    if (cache && !PyDict_Check(cache)) cache = NULL;
-
-    Py_ssize_t nitems = PyList_Check(items) ? PyList_GET_SIZE(items) : 0;
+    PyObject *state = SLOT(node, off_scroll_state);     /* borrowed */
+    PyObject *children = SLOT(node, off_children);      /* borrowed */
+    Py_ssize_t total = PyTuple_GET_SIZE(children);
 
     rc_set_int(state, a_height, h);
-    rc_set_int(state, a_total, (int)nitems);
+    rc_set_int(state, a_total, (int)total);
 
     int follow = rc_bool_attr(state, a_follow, 0);
     int max_off = rc_int_attr(state, a_max_offset, 0);
@@ -1322,45 +1307,14 @@ static int render_scroll(RenderCtx *ctx, PyObject *node,
     if (offset > max_off) offset = max_off;
     rc_set_int(state, a_offset, offset);
 
-    if ((int)nitems > h && offset >= max_off)
+    if ((int)total > h && offset >= max_off)
         rc_set_bool(state, a_follow, 1);
 
     int rows = 0;
-    for (Py_ssize_t i = (Py_ssize_t)offset; i < nitems && rows < h; i++) {
-        PyObject *item = PyList_GET_ITEM(items, i);
-        PyObject *child = NULL;
-        PyObject *ck = cache ? PyLong_FromVoidPtr(item) : NULL;
-
-        if (ck) {
-            PyObject *entry = PyDict_GetItem(cache, ck);  /* borrowed */
-            if (entry && PyTuple_Check(entry) &&
-                PyTuple_GET_SIZE(entry) >= 2 &&
-                (int)PyLong_AsLong(PyTuple_GET_ITEM(entry, 0)) == w) {
-                child = PyTuple_GET_ITEM(entry, 1);
-                Py_INCREF(child);
-            }
-            if (PyErr_Occurred()) PyErr_Clear();
-        }
-
-        if (!child) {
-            PyObject *idx = PyLong_FromSsize_t(i);
-            if (!idx) { Py_XDECREF(ck); return -1; }
-            child = PyObject_CallFunctionObjArgs(fn, item, idx, NULL);
-            Py_DECREF(idx);
-            if (child && ck) {
-                PyObject *entry = Py_BuildValue("(iO)", w, child);
-                if (entry) {
-                    PyDict_SetItem(cache, ck, entry);
-                    Py_DECREF(entry);
-                }
-            }
-        }
-        Py_XDECREF(ck);
-        if (!child) return -1;
-
+    for (Py_ssize_t i = (Py_ssize_t)offset; i < total && rows < h; i++) {
         int remaining = h - rows;
-        int cr = c_render_node(ctx, child, x, y + rows, w, remaining, bg);
-        Py_DECREF(child);
+        int cr = c_render_node(ctx, PyTuple_GET_ITEM(children, i),
+                               x, y + rows, w, remaining, bg);
         if (cr < 0) return -1;
         if (cr > remaining) cr = remaining;
         rows += cr;

@@ -3,9 +3,7 @@
 from conftest import SnapFn
 
 from ttyz import (
-    Buffer,
     hstack,
-    render_to_buffer,
     scroll,
     scrollbar,
     scrollbar_default,
@@ -13,7 +11,6 @@ from ttyz import (
     vstack,
 )
 from ttyz.components.scroll import ScrollState
-from ttyz.components.text import Text
 
 
 def _state(offset: int = 0) -> ScrollState:
@@ -830,94 +827,3 @@ def test_scrollbar_height_equals_total(snap: SnapFn):
     s.height = 5
     s.total = 5
     snap(scrollbar(state=s), 1, 5)
-
-
-# ── Lazy call shape: scroll(items, render_fn, *, state=...) ──────────
-
-
-def _row_str(x: str, i: int) -> Text:
-    return text(x)
-
-
-def _row_int(x: int, i: int) -> Text:
-    return text(str(x))
-
-
-def test_lazy_renders_slice_at_offset(snap: SnapFn):
-    s = _state(2)
-    items = [f"item-{i}" for i in range(10)]
-    snap(scroll(items, _row_str, state=s), 80, 3)
-
-
-def test_lazy_accepts_tuple(snap: SnapFn):
-    s = _state()
-    items = ("a", "b", "c", "d")
-    snap(scroll(items, _row_str, state=s), 80, 2)
-
-
-def test_lazy_empty_items(snap: SnapFn):
-    s = _state()
-    snap(scroll([], _row_str, state=s), 10, 3)
-
-
-def test_lazy_writes_state_total_and_height():
-    """After render, scroll writes items-count and viewport height to state."""
-    s = _state()
-    items = list(range(1000))
-    buf = Buffer(20, 5)
-    render_to_buffer(scroll(items, _row_int, state=s), buf)
-    assert s.total == 1000
-    assert s.height == 5
-
-
-def test_lazy_does_not_copy_items_list():
-    """Factory must reuse a list argument — perf-critical at large N."""
-    s = _state()
-    items = list(range(1000))
-    node = scroll(items, _row_int, state=s)
-    assert node.items is items
-
-
-def test_lazy_only_invokes_render_fn_for_visible_items():
-    """Virtualization invariant: render_fn is called for the visible window only."""
-    s = _state(500)
-    items = list(range(10_000))
-    calls: list[int] = []
-
-    def row(item: int, i: int) -> Text:
-        calls.append(i)
-        return text(str(item))
-
-    buf = Buffer(20, 8)
-    render_to_buffer(scroll(items, row, state=s), buf)
-    assert calls == [500, 501, 502, 503, 504, 505, 506, 507]
-
-
-def test_lazy_clamps_offset_beyond_end():
-    s = _state(9999)
-    items = list(range(10))
-    buf = Buffer(20, 4)
-    render_to_buffer(scroll(items, _row_int, state=s), buf)
-    assert s.offset == s.max_offset  # clamped to 10 - 4 = 6
-
-
-def test_lazy_follow_sticks_to_bottom():
-    s = ScrollState(follow=True)
-    items = list(range(100))
-    buf = Buffer(20, 10)
-    render_to_buffer(scroll(items, _row_int, state=s), buf)
-    assert s.offset == s.max_offset  # 100 - 10 = 90
-    assert s.follow is True
-
-
-def test_eager_and_lazy_produce_same_output(snap: SnapFn):
-    """scroll(*children) is sugar for scroll(list, identity)."""
-    s1 = _state(1)
-    s2 = _state(1)
-    nodes = [text("a"), text("b"), text("c"), text("d")]
-
-    def identity(n: Text, i: int) -> Text:
-        return n
-
-    snap(scroll(*nodes, state=s1), 80, 2, name="eager_lazy_equivalence")
-    snap(scroll(nodes, identity, state=s2), 80, 2, name="eager_lazy_equivalence")

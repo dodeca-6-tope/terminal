@@ -70,14 +70,11 @@ def list(
 ) -> Scroll:
     state.cursor = state.clamp(state.cursor)
     state.scroll.scroll_to_visible(state.cursor)
-    cursor = state.cursor
-
-    def row(item: T, i: int) -> Node:
-        return render_fn(item, i == cursor)
-
+    children = [
+        render_fn(item, i == state.cursor) for i, item in enumerate(state.items)
+    ]
     return scroll(
-        state.items,
-        row,
+        *children,
         state=state.scroll,
         width=width,
         height=height,
