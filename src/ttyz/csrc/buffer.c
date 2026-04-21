@@ -96,6 +96,20 @@ static void buf_emit_extras(BufferObject *buf, int pos, OutBuf *out) {
     }
 }
 
+/* Emit one cell: maybe-SGR-change + UTF-8 encode + extras. */
+static inline void emit_cell(BufferObject *buf, OutBuf *out,
+                              Cell c, int pos, Style *active) {
+    if (!style_eq(c.style, *active)) {
+        emit_sgr(out, c.style);
+        *active = c.style;
+    }
+    Py_UCS4 ch = (c.ch == UNWRITTEN) ? ' ' : c.ch;
+    char u8[4];
+    int u8len = encode_utf8(ch, u8);
+    outbuf_add(out, u8, (size_t)u8len);
+    buf_emit_extras(buf, pos, out);
+}
+
 /* ── dump ─────────────────────────────────────────────────────────── */
 
 static PyObject *Buffer_dump(BufferObject *self, PyObject *args) {
@@ -123,15 +137,7 @@ static PyObject *Buffer_dump(BufferObject *self, PyObject *args) {
         for (int col = 0; col <= last; col++) {
             Cell c = cells[off + col];
             if (c.ch == WIDE_CHAR) continue;
-            if (!style_eq(c.style, active)) {
-                emit_sgr(&out, c.style);
-                active = c.style;
-            }
-            Py_UCS4 ch = (c.ch == UNWRITTEN) ? ' ' : c.ch;
-            char u8[4];
-            int u8len = encode_utf8(ch, u8);
-            outbuf_add(&out, u8, (size_t)u8len);
-            buf_emit_extras(self, off + col, &out);
+            emit_cell(self, &out, c, off + col, &active);
         }
     }
 
@@ -181,14 +187,7 @@ static PyObject *Buffer_diff(BufferObject *self, PyObject *args) {
 
             /* Start a dirty run */
             outbuf_moveto(&out, row + 1, col + 1);
-            if (!style_eq(c.style, active)) {
-                emit_sgr(&out, c.style);
-                active = c.style;
-            }
-            Py_UCS4 ch = (c.ch == UNWRITTEN) ? ' ' : c.ch;
-            char u8[4];
-            outbuf_add(&out, u8, (size_t)encode_utf8(ch, u8));
-            buf_emit_extras(self, off + col, &out);
+            emit_cell(self, &out, c, off + col, &active);
             col++;
 
             /* Extend run with adjacent dirty cells */
@@ -197,13 +196,7 @@ static PyObject *Buffer_diff(BufferObject *self, PyObject *args) {
                 Cell p2 = pc[off + col];
                 if (c2.ch == p2.ch && style_eq(c2.style, p2.style)) break;
                 if (c2.ch == WIDE_CHAR) { col++; continue; }
-                if (!style_eq(c2.style, active)) {
-                    emit_sgr(&out, c2.style);
-                    active = c2.style;
-                }
-                Py_UCS4 ch2 = (c2.ch == UNWRITTEN) ? ' ' : c2.ch;
-                outbuf_add(&out, u8, (size_t)encode_utf8(ch2, u8));
-                buf_emit_extras(self, off + col, &out);
+                emit_cell(self, &out, c2, off + col, &active);
                 col++;
             }
         }

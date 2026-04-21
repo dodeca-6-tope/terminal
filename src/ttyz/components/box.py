@@ -8,14 +8,6 @@ from ttyz.components.base import Node, Overflow
 
 BorderStyle: TypeAlias = Literal["rounded", "normal", "double", "heavy"]
 
-BORDERS: dict[BorderStyle, tuple[str, str, str, str, str, str]] = {
-    # (top_left, top_right, bottom_left, bottom_right, horizontal, vertical)
-    "rounded": ("╭", "╮", "╰", "╯", "─", "│"),
-    "normal": ("┌", "┐", "└", "┘", "─", "│"),
-    "double": ("╔", "╗", "╚", "╝", "═", "║"),
-    "heavy": ("┏", "┓", "┗", "┛", "━", "┃"),
-}
-
 
 class Box(Node):
     """Box node — border around a single child."""

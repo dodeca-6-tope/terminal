@@ -20,7 +20,8 @@ def scrollbar_default(h: int, total: int, offset: int) -> list[str]:
     max_off = total - h
     top2 = offset * (h2 - thumb2) // max_off if max_off > 0 else 0
     bot2 = top2 + thumb2
-    return ["┃" if i * 2 < bot2 and (i + 1) * 2 > top2 else dim("│") for i in range(h)]
+    track = dim("│")
+    return ["┃" if i * 2 < bot2 and (i + 1) * 2 > top2 else track for i in range(h)]
 
 
 class Scrollbar(Node):

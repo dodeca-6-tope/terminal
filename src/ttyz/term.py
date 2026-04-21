@@ -45,7 +45,13 @@ class TTY:
         self._prev: Buffer | None = None
         self._wake_r, self._wake_w = os.pipe()
         self._size = size
+        self._cached_size: os.terminal_size | None = None
         atexit.register(self.cleanup)
+
+    def _current_size(self) -> os.terminal_size:
+        if self._cached_size is None:
+            self._cached_size = self._size()
+        return self._cached_size
 
     def __enter__(self) -> TTY:
         fd = sys.stdin.fileno()
@@ -86,24 +92,28 @@ class TTY:
     def _on_sigwinch(self, signum: int, frame: FrameType | None) -> None:
         self._resized = True
         self._prev = None
+        self._cached_size = None
+
+    def _drain_resize(self) -> Resize | None:
+        if not self._resized:
+            return None
+        self._resized = False
+        size = self._current_size()
+        return Resize(cols=size.columns, lines=size.lines)
 
     def readkey(self, timeout: float = 1 / 60) -> Event | None:
         """Read a single input event. Returns None on timeout."""
         assert self._keys is not None
-        if self._resized:
-            self._resized = False
-            size = os.get_terminal_size()
-            return Resize(cols=size.columns, lines=size.lines)
+        if (ev := self._drain_resize()) is not None:
+            return ev
         result = self._keys.read(timeout)
-        if result is None and self._resized:
-            self._resized = False
-            size = os.get_terminal_size()
-            return Resize(cols=size.columns, lines=size.lines)
+        if result is None and (ev := self._drain_resize()) is not None:
+            return ev
         return result
 
     def draw(self, node: object) -> None:
         """Draw a node tree to the terminal with cell-level diffing."""
-        size = self._size()
+        size = self._current_size()
         prev = self._prev
 
         buf = Buffer(size.columns, size.lines)
@@ -130,7 +140,7 @@ class TTY:
     @property
     def size(self) -> os.terminal_size:
         """Current terminal dimensions (columns, lines)."""
-        return self._size()
+        return self._current_size()
 
     def wake(self) -> None:
         """Wake the event loop from any thread."""

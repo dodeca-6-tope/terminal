@@ -314,6 +314,7 @@ class KeyReader:
     def __init__(self, fd: int, wake_fd: int | None = None) -> None:
         self._fd = fd
         self._wake_fd = wake_fd
+        self._fds = [fd] if wake_fd is None else [fd, wake_fd]
         self._utf8 = codecs.getincrementaldecoder("utf-8")("ignore")
         self._buf = bytearray()
 
@@ -321,9 +322,8 @@ class KeyReader:
         """Wait up to timeout for data, then drain all available bytes into _buf."""
         if self._buf:
             return True
-        fds = [self._fd] if self._wake_fd is None else [self._fd, self._wake_fd]
         try:
-            ready = select.select(fds, [], [], timeout)[0]
+            ready = select.select(self._fds, [], [], timeout)[0]
         except InterruptedError:
             return False
         if self._wake_fd is not None and self._wake_fd in ready:

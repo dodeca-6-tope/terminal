@@ -218,24 +218,6 @@ static PyObject *slice_ansi_visible(PyObject *s, int vis_start, int vis_end) {
     return outbuf_to_pystr(&ob);
 }
 
-/* Visible width of a string, skipping ANSI escapes. */
-static int visible_width_ansi(PyObject *s) {
-    Py_ssize_t len = PyUnicode_GET_LENGTH(s);
-    int kind = PyUnicode_KIND(s);
-    const void *data = PyUnicode_DATA(s);
-    int vw = 0;
-    for (Py_ssize_t pos = 0; pos < len; ) {
-        Py_UCS4 ch = PyUnicode_READ(kind, data, pos);
-        if (ch == 0x1B) {
-            pos = skip_escape(data, kind, pos, len);
-        } else {
-            vw += cwidth(ch);
-            pos++;
-        }
-    }
-    return vw;
-}
-
 /* ── truncate_line (head / middle / tail) ─────────────────────────── */
 /*
  * Truncate a single line to `width` visible columns with ellipsis.
@@ -248,7 +230,7 @@ static PyObject *truncate_line(PyObject *raw_line, int width, char mode) {
 
     /* ANSI-aware path. */
     if (has_esc) {
-        int vw = visible_width_ansi(raw_line);
+        int vw = str_display_width(raw_line);
         if (vw <= width) {
             Py_INCREF(raw_line);
             return raw_line;

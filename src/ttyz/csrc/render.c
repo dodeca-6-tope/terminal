@@ -22,7 +22,6 @@ static int render_types_ready = 0;  /* safe: only mutated under the GIL */
 
 /* Node type pointers — resolved once from Python classes. */
 static PyTypeObject *NodeType_;
-static PyTypeObject *CustomType_;
 static PyTypeObject *TextType_;
 static PyTypeObject *HStackType_;
 static PyTypeObject *VStackType_;
@@ -36,38 +35,17 @@ static PyTypeObject *ScrollbarType_;
 static PyTypeObject *TableType_;
 static PyTypeObject *InputType_;
 
-/* Interned attribute name strings. */
-static PyObject *a_children;
-static PyObject *a_grow;
-static PyObject *a_width;
-static PyObject *a_height;
-static PyObject *a_bg;
-static PyObject *a_overflow;
+/* Interned attribute name strings — only those still read via
+ * PyObject_GetAttr remain. Slot-backed fields are accessed by offset. */
 static PyObject *a_value;
-static PyObject *a__lines;
-static PyObject *a__visible_w;
-static PyObject *a_pl;
-static PyObject *a_pr;
-static PyObject *a_truncation;
 static PyObject *a_spacing;
-static PyObject *a_needs_measure_pass;
-static PyObject *a_min_length;
-static PyObject *a_style;
-static PyObject *a_title;
-static PyObject *a_padding;
-static PyObject *a_justify_content;
-static PyObject *a_align_items;
-static PyObject *a_state;
 static PyObject *a_offset;
 static PyObject *a_follow;
 static PyObject *a_max_offset;
 static PyObject *a_rows;
 static PyObject *a_cells;
-static PyObject *a_buffer;
-static PyObject *a_active;
-static PyObject *a_placeholder;
+static PyObject *a_height;
 static PyObject *a_total;
-static PyObject *a_wrap;
 static PyObject *a_render_fn;
 
 /* Interned constant strings. */
@@ -182,7 +160,6 @@ static int init_render_types(void) {
 } while (0)
 
     LOAD(NodeType_,      "ttyz.components.base",      "Node");
-    LOAD(CustomType_,    "ttyz.components.base",      "Custom");
     LOAD(TextType_,      "ttyz.components.text",      "Text");
     LOAD(HStackType_,    "ttyz.components.hstack",    "HStack");
     LOAD(VStackType_,    "ttyz.components.vstack",    "VStack");
@@ -202,37 +179,15 @@ static int init_render_types(void) {
     if (!var) return -1;                               \
 } while (0)
 
-    INTERN(a_children,        "children");
-    INTERN(a_grow,            "grow");
-    INTERN(a_width,           "width");
-    INTERN(a_height,          "height");
-    INTERN(a_bg,              "bg");
-    INTERN(a_overflow,        "overflow");
     INTERN(a_value,           "value");
-    INTERN(a__lines,          "_lines");
-    INTERN(a__visible_w,      "_visible_w");
-    INTERN(a_pl,              "pl");
-    INTERN(a_pr,              "pr");
-    INTERN(a_truncation,      "truncation");
     INTERN(a_spacing,         "spacing");
-    INTERN(a_needs_measure_pass, "needs_measure_pass");
-    INTERN(a_min_length,      "min_length");
-    INTERN(a_style,           "style");
-    INTERN(a_title,           "title");
-    INTERN(a_padding,         "padding");
-    INTERN(a_justify_content, "justify_content");
-    INTERN(a_align_items,     "align_items");
-    INTERN(a_state,           "state");
     INTERN(a_offset,          "offset");
     INTERN(a_follow,          "follow");
     INTERN(a_max_offset,      "max_offset");
     INTERN(a_rows,            "rows");
     INTERN(a_cells,           "cells");
-    INTERN(a_buffer,          "buffer");
-    INTERN(a_active,          "active");
-    INTERN(a_placeholder,     "placeholder");
+    INTERN(a_height,          "height");
     INTERN(a_total,           "total");
-    INTERN(a_wrap,            "wrap");
     INTERN(a_render_fn,       "render_fn");
     INTERN(s_visible,         "visible");
     INTERN(s_start,           "start");
