@@ -157,7 +157,6 @@ MOD_KEYS: dict[tuple[bytes, bytes], str] = {
 #         0b100 = report alternate keys, 0b1000 = report all keys
 KITTY_ENABLE = "\033[>1u"  # push mode 1 (disambiguate escape codes)
 KITTY_DISABLE = "\033[<u"  # pop keyboard mode
-KITTY_QUERY = "\033[?u"  # query current keyboard mode
 
 # Kitty protocol: unicode codepoint → key name
 _KITTY_SPECIAL: dict[int, str] = {

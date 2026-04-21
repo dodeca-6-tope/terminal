@@ -5,7 +5,6 @@ from __future__ import annotations
 import atexit
 import contextlib
 import os
-import select as _select
 import signal
 import sys
 import termios
@@ -19,14 +18,19 @@ from ttyz.ext import Buffer, render_to_buffer
 from ttyz.keys import (
     KITTY_DISABLE,
     KITTY_ENABLE,
-    KITTY_QUERY,
     Event,
     KeyReader,
     Resize,
 )
 
-_ENTER = "\033[?1049h\033[?25l\033[?7l\033[?2004h\033[?1004h\033[?1000h\033[?1006h"
-_EXIT = "\033[?1006l\033[?1000l\033[?1004l\033[?2004l\033[?7h\033[?25h\033[?1049l"
+_ENTER = (
+    "\033[?1049h\033[?25l\033[?7l\033[?2004h\033[?1004h\033[?1000h\033[?1006h"
+    + KITTY_ENABLE
+)
+_EXIT = (
+    KITTY_DISABLE
+    + "\033[?1006l\033[?1000l\033[?1004l\033[?2004l\033[?7h\033[?25h\033[?1049l"
+)
 
 
 class TTY:
@@ -39,7 +43,6 @@ class TTY:
         self._saved: list[Any] | None = None
         self._active = False
         self._resized = False
-        self._kitty = False
         self._prev_sigwinch: Callable[[int, FrameType | None], Any] | int | None = None
         self._keys: KeyReader | None = None
         self._prev: Buffer | None = None
@@ -72,9 +75,6 @@ class TTY:
         if self._active:
             self._active = False
             self._prev = None
-            if self._kitty:
-                sys.stdout.write(KITTY_DISABLE)
-                self._kitty = False
             sys.stdout.write(_EXIT)
             sys.stdout.flush()
             if self._saved and self._fd is not None:
@@ -153,8 +153,6 @@ class TTY:
 
     def suspend(self) -> None:
         """Leave alt screen and restore terminal for a child process."""
-        if self._kitty:
-            sys.stdout.write(KITTY_DISABLE)
         sys.stdout.write(_EXIT)
         sys.stdout.flush()
         if self._saved and self._fd is not None:
@@ -163,42 +161,7 @@ class TTY:
     def resume(self) -> None:
         """Re-enter alt screen and raw mode after a child process."""
         self._enter_raw()
-        if self._kitty:
-            sys.stdout.write(KITTY_ENABLE)
-            sys.stdout.flush()
         self._prev = None
-
-    def kitty_supported(self) -> bool:
-        """Check if terminal supports Kitty keyboard protocol."""
-        if self._fd is None:
-            return False
-        sys.stdout.write(KITTY_QUERY)
-        sys.stdout.flush()
-        ready = _select.select([self._fd], [], [], 0.01)[0]
-        if not ready:
-            return False
-        buf = os.read(self._fd, 256)
-        idx = buf.find(b"\x1b[?")
-        if idx < 0:
-            return False
-        for i in range(idx + 3, len(buf)):
-            if buf[i] == ord("u"):
-                return True
-            if not (0x30 <= buf[i] <= 0x3F):
-                break
-        return False
-
-    def kitty_enable(self) -> None:
-        """Enable Kitty keyboard protocol. Keys will include modifier info."""
-        self._kitty = True
-        sys.stdout.write(KITTY_ENABLE)
-        sys.stdout.flush()
-
-    def kitty_disable(self) -> None:
-        """Disable Kitty keyboard protocol."""
-        self._kitty = False
-        sys.stdout.write(KITTY_DISABLE)
-        sys.stdout.flush()
 
     def _enter_raw(self) -> None:
         """Switch to raw mode with output processing, enter alt screen."""
