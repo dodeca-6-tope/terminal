@@ -28,7 +28,9 @@ def main() -> int:
     p.add_argument(
         "expr", help="Python expression evaluating to a Node ('-' reads stdin)"
     )
-    p.add_argument("--width", "-w", type=int, help="default: terminal width, fallback 80")
+    p.add_argument(
+        "--width", "-w", type=int, help="default: terminal width, fallback 80"
+    )
     p.add_argument("--height", type=int, help="default: content's natural height")
     args = p.parse_args()
 
