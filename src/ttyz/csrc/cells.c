@@ -7,14 +7,14 @@
  */
 
 /* Write a single cell (bounds-checked). */
-static inline void rc_set_cell(BufferObject *buf, int col, int row,
+static inline void cell_set(BufferObject *buf, int col, int row,
                                Py_UCS4 ch, Style style) {
     if (col >= 0 && col < buf->width && row >= 0 && row < buf->height)
         buf->cells[row * buf->width + col] = (Cell){ch, style};
 }
 
 /* Fill a rectangle with blank cells of the given style. */
-static void rc_fill_region(BufferObject *buf, int x, int y, int w, int h,
+static void fill_region(BufferObject *buf, int x, int y, int w, int h,
                            Style style) {
     int x1 = x + w, y1 = y + h;
     if (x < 0) x = 0;
@@ -34,7 +34,7 @@ static void rc_fill_region(BufferObject *buf, int x, int y, int w, int h,
 
 /* Fill only UNWRITTEN cells in a region — used after rendering content
    so that gaps get the background without overwriting content. */
-static void rc_fill_unwritten(BufferObject *buf, int x, int y, int w, int h,
+static void fill_unwritten(BufferObject *buf, int x, int y, int w, int h,
                                Style style) {
     int x1 = x + w, y1 = y + h;
     if (x < 0) x = 0;
@@ -161,9 +161,9 @@ static void render_padded_line(BufferObject *buf, int x, int y, int w,
                                PyObject *line, Style bg) {
     int inner_x = x + pl;
     for (int c = x; c < inner_x && c < x + w; c++)
-        rc_set_cell(buf, c, y, ' ', bg);
+        cell_set(buf, c, y, ' ', bg);
     parse_line_into(buf, inner_x, y, max_w, line, bg);
     int rp = inner_x + max_w;
     for (int c = rp; c < rp + pr && c < x + w; c++)
-        rc_set_cell(buf, c, y, ' ', bg);
+        cell_set(buf, c, y, ' ', bg);
 }
