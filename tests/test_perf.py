@@ -55,7 +55,7 @@ def test_render_ascii_frame():
         render_to_buffer(tree, buf)
 
     elapsed = _timed(run, iterations=1000)
-    assert elapsed < 0.02, f"render ASCII 1k frames took {elapsed:.3f}s"
+    assert elapsed < 0.019, f"render ASCII 1k frames took {elapsed:.3f}s"
 
 
 def test_render_ansi_frame():
@@ -67,7 +67,7 @@ def test_render_ansi_frame():
         render_to_buffer(tree, buf)
 
     elapsed = _timed(run, iterations=1000)
-    assert elapsed < 0.032, f"render ANSI 1k frames took {elapsed:.3f}s"
+    assert elapsed < 0.031, f"render ANSI 1k frames took {elapsed:.3f}s"
 
 
 # ── Buffer.diff ──────────────────────────────────────────────────────
@@ -87,7 +87,7 @@ def test_diff_full_frame():
     """Guard: diff performance on fully changed frames."""
     old, new = _make_pair("a", "b")
     elapsed = _timed(lambda: new.diff(old), iterations=100)
-    assert elapsed < 0.009, f"diff changed 100 took {elapsed:.3f}s"
+    assert elapsed < 0.0088, f"diff changed 100 took {elapsed:.3f}s"
 
 
 def test_diff_identical_emits_nothing():
@@ -137,7 +137,7 @@ def test_render_nested_hstack():
         render_to_buffer(tree, buf)
 
     elapsed = _timed(run, iterations=10)
-    assert elapsed < 0.008, f"nested hstack x10 took {elapsed:.3f}s"
+    assert elapsed < 0.0075, f"nested hstack x10 took {elapsed:.3f}s"
 
 
 def test_render_hstack_flex():
@@ -165,7 +165,7 @@ def test_render_hstack_flex():
         render_to_buffer(tree, buf)
 
     elapsed = _timed(run, iterations=50)
-    assert elapsed < 0.022, f"hstack flex x50 took {elapsed:.3f}s"
+    assert elapsed < 0.020, f"hstack flex x50 took {elapsed:.3f}s"
 
 
 def test_scroll_lazy_foreach_scales_by_viewport():
@@ -186,7 +186,7 @@ def test_scroll_lazy_foreach_scales_by_viewport():
         render_to_buffer(tree, buf, 20)
 
     elapsed = _timed(run, iterations=500)
-    assert elapsed < 0.012, f"lazy foreach 500 frames took {elapsed:.3f}s"
+    assert elapsed < 0.011, f"lazy foreach 500 frames took {elapsed:.3f}s"
 
 
 # ── Full pipeline: build → render_to_buffer → diff ───────────────────
@@ -231,4 +231,4 @@ def test_pipeline_cold():
             prev = buf
 
     elapsed = _timed(run)
-    assert elapsed < 0.3, f"cold pipeline 100 took {elapsed:.3f}s"
+    assert elapsed < 0.022, f"cold pipeline 100 took {elapsed:.3f}s"
