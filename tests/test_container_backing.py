@@ -48,26 +48,25 @@ def test_vstack_list_as_backing():
     assert render(node, 10, 3) == ["x", "y", "z"]
 
 
-def test_vstack_sequence_is_non_flex_to_enable_short_circuit():
-    """Sequence backing forces has_flex=False so the render loop can break."""
+def test_vstack_sequence_skips_measure_pass_to_enable_short_circuit():
+    """Sequence backing forces needs_measure_pass=False so the render loop can break."""
     counter = [0]
-    # Height constraint forces non-flex vstack to stop after filling h.
-    # (non-flex vstack doesn't propagate h to children, so the OUTER h
-    # bounds the iteration.)
+    # Height constraint bounds the non-measure vstack iteration.
+    # (it doesn't propagate h to children, so the OUTER h bounds it.)
     t.render_to_buffer(
         t.vstack(LazySeq(1_000_000, counter), height="5"), t.Buffer(10, 5), 5
     )
     assert counter[0] == 5
-    # Confirm the stack wasn't accidentally put in flex mode.
+    # Confirm the stack wasn't accidentally put in the measure-pass path.
     node = t.vstack(LazySeq(1_000_000, [0]))
-    assert node.has_flex is False
+    assert node.needs_measure_pass is False
 
 
-def test_vstack_tuple_varargs_still_probes_has_flex():
+def test_vstack_tuple_varargs_still_probes_needs_measure_pass():
     flex = t.vstack(t.text("a"), t.text("b", grow=1))
-    assert flex.has_flex is True
+    assert flex.needs_measure_pass is True
     non_flex = t.vstack(t.text("a"), t.text("b"))
-    assert non_flex.has_flex is False
+    assert non_flex.needs_measure_pass is False
 
 
 # ── hstack ──────────────────────────────────────────────────────────

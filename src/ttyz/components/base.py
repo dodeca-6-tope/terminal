@@ -57,6 +57,15 @@ def resolve_children(
     return children  # type: ignore[return-value]
 
 
+def is_eager_backing(backing: Sequence[Node]) -> bool:
+    """Whitelist of backings safe to iterate at construction time.
+
+    Only the varargs tuple qualifies — any other Sequence might have
+    expensive __getitem__ or be huge, so we treat it as lazy.
+    """
+    return isinstance(backing, tuple)
+
+
 T = TypeVar("T")
 
 

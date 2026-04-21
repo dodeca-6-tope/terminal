@@ -50,7 +50,7 @@ static PyObject *a_pl;
 static PyObject *a_pr;
 static PyObject *a_truncation;
 static PyObject *a_spacing;
-static PyObject *a_has_flex;
+static PyObject *a_needs_measure_pass;
 static PyObject *a_min_length;
 static PyObject *a_style;
 static PyObject *a_title;
@@ -101,7 +101,7 @@ static Py_ssize_t off_text_value, off_text_lines, off_text_visible_w,
 static Py_ssize_t off_hstack_spacing, off_hstack_jc, off_hstack_ai,
                    off_hstack_wrap;
 /* VStack */
-static Py_ssize_t off_vstack_spacing, off_vstack_has_flex;
+static Py_ssize_t off_vstack_spacing, off_vstack_needs_measure_pass;
 /* ZStack */
 static Py_ssize_t off_zstack_jc, off_zstack_ai;
 /* Box */
@@ -215,7 +215,7 @@ static int init_render_types(void) {
     INTERN(a_pr,              "pr");
     INTERN(a_truncation,      "truncation");
     INTERN(a_spacing,         "spacing");
-    INTERN(a_has_flex,        "has_flex");
+    INTERN(a_needs_measure_pass, "needs_measure_pass");
     INTERN(a_min_length,      "min_length");
     INTERN(a_style,           "style");
     INTERN(a_title,           "title");
@@ -280,7 +280,7 @@ static int init_render_types(void) {
     OFF(off_hstack_wrap,    HStackType_,  "wrap");
     /* VStack */
     OFF(off_vstack_spacing,  VStackType_,  "spacing");
-    OFF(off_vstack_has_flex, VStackType_,  "has_flex");
+    OFF(off_vstack_needs_measure_pass, VStackType_, "needs_measure_pass");
     /* ZStack */
     OFF(off_zstack_jc,      ZStackType_,  "justify_content");
     OFF(off_zstack_ai,      ZStackType_,  "align_items");
@@ -919,9 +919,9 @@ static int render_vstack(RenderCtx *ctx, PyObject *node,
 
     int spacing = slot_int(node, off_vstack_spacing);
 
-    int has_flex = (h >= 0) ? slot_bool(node, off_vstack_has_flex) : 0;
+    int needs_measure_pass = (h >= 0) ? slot_bool(node, off_vstack_needs_measure_pass) : 0;
 
-    if (!has_flex) {
+    if (!needs_measure_pass) {
         /* No flex — render children unconstrained, clip total at h.
          * Children don't receive h (matches Python _fill_rows). */
         int rows = 0;
