@@ -16,7 +16,7 @@
 #include "buffer.c"       /* Buffer type: cells ↔ ANSI */
 #include "cells.c"        /* ANSI string → cells primitives */
 #include "text.c"         /* line-level transforms (truncate/wrap) */
-#include "render_init.c"  /* type discovery + slot-offset bootstrap */
+#include "types.c"        /* Python type loading + slot-offset discovery */
 #include "render.c"       /* node-tree measure + render */
 
 /* ── Module definition ─────────────────────────────────────────────── */

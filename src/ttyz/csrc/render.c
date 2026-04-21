@@ -7,7 +7,7 @@
  * All node types are handled in C: Text, HStack, VStack, ZStack, Box,
  * Scroll, Table, Foreach, Cond, Spacer, Input, Scrollbar, Custom.
  *
- * Type discovery and slot-offset bootstrap live in render_init.c.
+ * Python type loading + slot-offset discovery live in types.c.
  * ANSI↔cells primitives live in cells.c.
  */
 

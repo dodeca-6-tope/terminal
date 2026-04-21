@@ -1,5 +1,5 @@
 /*
- * render_init.c — Type discovery and slot-offset bootstrap.
+ * types.c — Python type loading + slot-offset discovery.
  *
  * Runs once on first render_to_buffer() call.  Loads node type objects
  * from the Python ttyz.components.* modules, interns constants, and
