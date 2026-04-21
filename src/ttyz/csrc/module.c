@@ -13,10 +13,11 @@
 #include "sgr.h"      /* SGR encode/decode (uses outbuf + ansi) */
 
 /* Implementation: buffer → cells → text → render. */
-#include "buffer.c"   /* Buffer type: cells ↔ ANSI */
-#include "cells.c"    /* ANSI string → cells primitives */
-#include "text.c"     /* line-level transforms (truncate/wrap) */
-#include "render.c"   /* node-tree measure + render */
+#include "buffer.c"       /* Buffer type: cells ↔ ANSI */
+#include "cells.c"        /* ANSI string → cells primitives */
+#include "text.c"         /* line-level transforms (truncate/wrap) */
+#include "render_init.c"  /* type discovery + slot-offset bootstrap */
+#include "render.c"       /* node-tree measure + render */
 
 /* ── Module definition ─────────────────────────────────────────────── */
 
